@@ -6,6 +6,8 @@ require("dotenv").config();
 
 const authRoutes = require("./routes/authRoutes");
 const hospitalRoutes = require("./routes/hospitalRoutes");
+const organRoutes = require("./routes/organRoutes");
+const organRequestRoutes = require("./routes/organRequestRoutes");
 
 const app = express();
 
@@ -57,6 +59,7 @@ app.use("/api/auth", authRoutes);
 
 app.use("/api/hospitals", hospitalRoutes);
 
+app.use("/api/organs", organRoutes);
 // ==========================================
 // SERVER
 // ==========================================
