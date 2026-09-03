@@ -11,7 +11,7 @@ export default function Home() {
         <div className="flex w-full items-center justify-between gap-2 text-sm sm:w-auto"><Link href="/hospital/login" className="rounded-lg px-2 py-2 text-slate-300 hover:text-white sm:px-4">Hospital login</Link><Link href="/admin/login" className="rounded-lg border border-slate-700 px-3 py-2 hover:bg-slate-800 sm:px-4">Admin portal</Link></div>
       </nav>
 
-      <section className="mx-auto grid max-w-7xl gap-12 px-5 pb-20 pt-16 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8 lg:pt-24">
+      <section className="mx-auto grid max-w-7xl gap-12 px-5 pb-20 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-8">
         <div>
           <span className="inline-flex rounded-full border border-blue-400/30 bg-blue-400/10 px-3 py-1 text-sm font-medium text-blue-200">Emergency Organ Donor Network</span>
           <h1 className="mt-6 max-w-3xl text-4xl font-bold leading-tight tracking-tight sm:text-6xl">Connecting hospitals to save lives through faster and smarter organ exchange.</h1>
