@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import BrandLogo from "../../components/BrandLogo";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
 
@@ -80,18 +79,6 @@ export default function AdminDashboard() {
   const transplantedOrgans = stats.transplantedOrgans || 0;
 
   // =========================================================
-  // LOGOUT
-  // =========================================================
-
-  const handleLogout = () => {
-    localStorage.removeItem("lifelink_token");
-
-    localStorage.removeItem("lifelink_user");
-
-    router.replace("/admin/login");
-  };
-
-  // =========================================================
   // LOADING
   // =========================================================
 
@@ -113,48 +100,6 @@ export default function AdminDashboard() {
 
   return (
     <main className="min-h-screen bg-gray-100">
-      {/* =====================================================
-          NAVBAR
-      ====================================================== */}
-
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-col items-start gap-4 sm:flex-row sm:items-center sm:justify-between">
-          <div>
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-2xl font-bold text-blue-600"
-            >
-              <span className="inline-flex items-center gap-2"><BrandLogo size={34} />LifeLink</span>
-            </button>
-
-            <p className="text-xs text-gray-500">Administrator Panel</p>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 sm:gap-5">
-            <button
-              onClick={() => router.push("/admin/hospitals")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Hospitals
-            </button>
-
-            <button
-              onClick={() => router.push("/admin/organs")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Organs
-            </button>
-
-            <button
-              onClick={handleLogout}
-              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-
       {/* =====================================================
           MAIN
       ====================================================== */}

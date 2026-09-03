@@ -140,18 +140,6 @@ export default function AdminHospitalDetailsPage() {
   };
 
   // =========================================================
-  // LOGOUT
-  // =========================================================
-
-  const logout = () => {
-    localStorage.removeItem("lifelink_token");
-
-    localStorage.removeItem("lifelink_user");
-
-    router.replace("/admin/login");
-  };
-
-  // =========================================================
   // LOADING
   // =========================================================
 
@@ -174,24 +162,6 @@ export default function AdminHospitalDetailsPage() {
   if (error && !hospital) {
     return (
       <main className="min-h-screen bg-gray-100">
-        <nav className="bg-white border-b border-gray-200">
-          <div className="max-w-7xl mx-auto px-6 py-4 flex justify-between items-center">
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-2xl font-bold text-blue-600"
-            >
-              LifeLink
-            </button>
-
-            <button
-              onClick={logout}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg"
-            >
-              Logout
-            </button>
-          </div>
-        </nav>
-
         <div className="max-w-3xl mx-auto px-6 py-12">
           <div className="bg-white border border-red-200 rounded-2xl p-8 text-center">
             <h1 className="text-2xl font-bold text-gray-900">
@@ -220,55 +190,6 @@ export default function AdminHospitalDetailsPage() {
 
   return (
     <main className="min-h-screen bg-gray-100">
-      {/* =====================================================
-          NAVBAR
-      ====================================================== */}
-
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-2xl font-bold text-blue-600"
-            >
-              LifeLink
-            </button>
-
-            <p className="text-xs text-gray-500">Administrator Panel</p>
-          </div>
-
-          <div className="flex items-center gap-5">
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Dashboard
-            </button>
-
-            <button
-              onClick={() => router.push("/admin/hospitals")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Hospitals
-            </button>
-
-            <button
-              onClick={() => router.push("/admin/organs")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Organs
-            </button>
-
-            <button
-              onClick={logout}
-              className="px-4 py-2 bg-red-500 text-white rounded-lg text-sm font-semibold hover:bg-red-600"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-
       {/* =====================================================
           CONTENT
       ====================================================== */}

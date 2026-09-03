@@ -31,6 +31,20 @@ export default function HospitalSidebar() {
     setOpen(false);
   };
 
+  const isActive = (href) => {
+    if (href === "/hospital/requests") {
+      return (
+        pathname === href ||
+        (pathname.startsWith(`${href}/`) &&
+          !pathname.startsWith(`${href}/sent`) &&
+          !pathname.startsWith(`${href}/received`) &&
+          !pathname.startsWith(`${href}/new`))
+      );
+    }
+
+    return pathname === href || pathname.startsWith(`${href}/`);
+  };
+
   return (
     <>
       {/* Mobile Header */}
@@ -48,6 +62,8 @@ export default function HospitalSidebar() {
           onClick={() => setOpen(!open)}
           className="rounded-lg p-2 text-white hover:bg-slate-800"
           aria-label="Toggle navigation"
+          aria-expanded={open}
+          aria-controls="hospital-sidebar"
         >
           {open ? (
             <span className="text-2xl">×</span>
@@ -69,6 +85,7 @@ export default function HospitalSidebar() {
 
       {/* Sidebar */}
       <aside
+        id="hospital-sidebar"
         className={`fixed left-0 top-0 z-50 h-screen w-64 bg-slate-900 text-white transition-transform duration-200
           md:translate-x-0
           ${open ? "translate-x-0" : "-translate-x-full"}`}
@@ -83,20 +100,21 @@ export default function HospitalSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav className="px-3 py-6">
+        <nav aria-label="Hospital navigation" className="px-3 py-6">
           <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
             Main Menu
           </p>
 
           <div className="space-y-1">
             {menuItems.map((item) => {
-              const active = pathname === item.href;
+              const active = isActive(item.href);
 
               return (
                 <Link
                   key={item.href}
                   href={item.href}
                   onClick={closeMobileMenu}
+                  aria-current={active ? "page" : undefined}
                   className={`block rounded-lg px-4 py-3 text-sm font-medium transition ${
                     active
                       ? "bg-blue-600 text-white"

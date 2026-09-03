@@ -132,18 +132,6 @@ export default function PendingHospitalsPage() {
   };
 
   // =========================================================
-  // LOGOUT
-  // =========================================================
-
-  const logout = () => {
-    localStorage.removeItem("lifelink_token");
-
-    localStorage.removeItem("lifelink_user");
-
-    router.replace("/admin/login");
-  };
-
-  // =========================================================
   // LOADING
   // =========================================================
 
@@ -165,53 +153,6 @@ export default function PendingHospitalsPage() {
 
   return (
     <main className="min-h-screen bg-gray-100">
-      {/* NAVBAR */}
-
-      <nav className="bg-white border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div>
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-2xl font-bold text-blue-600"
-            >
-              LifeLink
-            </button>
-
-            <p className="text-xs text-gray-500">Administrator Panel</p>
-          </div>
-
-          <div className="flex items-center gap-5">
-            <button
-              onClick={() => router.push("/admin/dashboard")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Dashboard
-            </button>
-
-            <button
-              onClick={() => router.push("/admin/hospitals")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Hospitals
-            </button>
-
-            <button
-              onClick={() => router.push("/admin/organs")}
-              className="text-sm text-gray-700 hover:text-blue-600"
-            >
-              Organs
-            </button>
-
-            <button
-              onClick={logout}
-              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-semibold hover:bg-red-600"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </nav>
-
       {/* CONTENT */}
 
       <section className="max-w-7xl mx-auto px-6 py-8">
