@@ -20,3 +20,6 @@ build/
 # OS
 .DS_Store
 Thumbs.db
+
+# LifeLink local database backup
+lifelink-backup/
