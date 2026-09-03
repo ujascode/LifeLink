@@ -8,6 +8,7 @@ const authRoutes = require("./routes/authRoutes");
 const hospitalRoutes = require("./routes/hospitalRoutes");
 const organRoutes = require("./routes/organRoutes");
 const organRequestRoutes = require("./routes/organRequestRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 const app = express();
 
@@ -60,6 +61,17 @@ app.use("/api/auth", authRoutes);
 app.use("/api/hospitals", hospitalRoutes);
 
 app.use("/api/organs", organRoutes);
+
+app.use("/api/organ-requests", organRequestRoutes);
+app.use("/api/admin", adminRoutes);
+
+app.use((error, req, res, next) => {
+  if (error?.name === "ValidationError" || error?.name === "CastError") {
+    return res.status(400).json({ success: false, message: "Invalid request data" });
+  }
+  console.error("Unhandled API error:", error);
+  return res.status(500).json({ success: false, message: "Internal server error" });
+});
 // ==========================================
 // SERVER
 // ==========================================

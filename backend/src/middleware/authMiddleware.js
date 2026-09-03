@@ -34,3 +34,5 @@ const authenticate = (req, res, next) => {
 };
 
 module.exports = authenticate;
+// Keep the named export available for routes that use destructuring.
+module.exports.authenticate = authenticate;

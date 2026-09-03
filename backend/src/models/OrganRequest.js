@@ -8,12 +8,6 @@ const organRequestSchema = new mongoose.Schema(
       required: true,
     },
 
-    donor: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "Donor",
-      required: true,
-    },
-
     requestingHospital: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "Hospital",
@@ -26,21 +20,42 @@ const organRequestSchema = new mongoose.Schema(
       required: true,
     },
 
-    requestStatus: {
+    patientName: {
       type: String,
-      default: "Pending",
-      enum: ["Pending", "Approved", "Rejected", "Cancelled", "Completed"],
-    },
-
-    requestDate: {
-      type: Date,
-      default: Date.now,
-    },
-
-    message: {
-      type: String,
+      required: true,
       trim: true,
-      maxlength: 500,
+    },
+
+    patientAge: {
+      type: Number,
+      required: true,
+      min: 0,
+      max: 120,
+    },
+
+    patientGender: {
+      type: String,
+      required: true,
+      enum: ["Male", "Female", "Other"],
+    },
+
+    urgency: {
+      type: String,
+      required: true,
+      enum: ["Low", "Medium", "High", "Critical"],
+    },
+
+    reason: {
+      type: String,
+      required: true,
+      trim: true,
+      maxlength: 1000,
+    },
+
+    status: {
+      type: String,
+      enum: ["Pending", "Accepted", "Rejected", "Cancelled", "Completed"],
+      default: "Pending",
     },
 
     responseMessage: {

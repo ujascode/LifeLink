@@ -5,6 +5,8 @@ const {
   loginHospital,
   loginAdmin,
   getCurrentUser,
+  requestPasswordReset,
+  resetPassword,
 } = require("../controllers/authController");
 
 const authenticate = require("../middleware/authMiddleware");
@@ -19,6 +21,9 @@ router.post("/hospital/login", loginHospital);
 
 // Admin Login
 router.post("/admin/login", loginAdmin);
+
+router.post("/forgot-password", requestPasswordReset);
+router.post("/reset-password/:token", resetPassword);
 
 // Get Current Logged-In User
 router.get("/me", authenticate, getCurrentUser);

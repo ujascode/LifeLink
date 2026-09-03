@@ -1,5 +1,6 @@
 const Hospital = require("../models/Hospital");
 const Admin = require("../models/Admin");
+const crypto = require("crypto");
 
 const { hashPassword, comparePassword } = require("../utils/password");
 
@@ -268,9 +269,48 @@ const getCurrentUser = async (req, res) => {
   }
 };
 
+const requestPasswordReset = async (req, res) => {
+  const { email, role = "hospital" } = req.body || {};
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail || !["hospital", "admin"].includes(role)) {
+    return res.status(400).json({ success: false, message: "A valid email and account type are required" });
+  }
+
+  const Model = role === "admin" ? Admin : Hospital;
+  const user = await Model.findOne({ email: normalizedEmail });
+  const response = { success: true, message: "If the account exists, password reset instructions are available." };
+  if (user) {
+    const token = crypto.randomBytes(32).toString("hex");
+    user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
+    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+    await user.save();
+    // There is no mail provider in local development. Never return this in production.
+    if (process.env.NODE_ENV !== "production") response.resetToken = token;
+  }
+  return res.json(response);
+};
+
+const resetPassword = async (req, res) => {
+  const hashedToken = crypto.createHash("sha256").update(req.params.token || "").digest("hex");
+  const { password, role = "hospital" } = req.body || {};
+  if (!password || password.length < 6 || !["hospital", "admin"].includes(role)) {
+    return res.status(400).json({ success: false, message: "Choose a valid account type and password of at least 6 characters" });
+  }
+  const Model = role === "admin" ? Admin : Hospital;
+  const user = await Model.findOne({ resetPasswordToken: hashedToken, resetPasswordExpires: { $gt: Date.now() } });
+  if (!user) return res.status(400).json({ success: false, message: "Reset token is invalid or expired" });
+  user.password = await hashPassword(password);
+  user.resetPasswordToken = null;
+  user.resetPasswordExpires = null;
+  await user.save();
+  return res.json({ success: true, message: "Password reset successfully" });
+};
+
 module.exports = {
   registerHospital,
   loginHospital,
   loginAdmin,
   getCurrentUser,
+  requestPasswordReset,
+  resetPassword,
 };

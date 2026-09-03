@@ -18,4 +18,6 @@ const authorizeRoles = (...allowedRoles) => {
   };
 };
 
+// Support both direct and named imports while older routes are migrated.
 module.exports = authorizeRoles;
+module.exports.authorizeRoles = authorizeRoles;

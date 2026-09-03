@@ -1,6 +1,16 @@
 const OrganRequest = require("../models/OrganRequest");
 const Organ = require("../models/Organ");
 const Hospital = require("../models/Hospital");
+const Notification = require("../models/Notification");
+
+const notify = async (data) => {
+  try {
+    await Notification.create(data);
+  } catch (error) {
+    // Notifications are helpful but must never break the organ workflow.
+    console.error("Notification error:", error.message);
+  }
+};
 
 // ==========================================
 // CREATE ORGAN REQUEST
@@ -135,6 +145,14 @@ const createOrganRequest = async (req, res) => {
       reason,
 
       status: "Pending",
+    });
+
+    await notify({
+      recipientHospital: organ.hospital,
+      type: "NewRequest",
+      title: "New organ request",
+      message: `${requestingHospital.hospitalName} requested your ${organ.organType}.`,
+      request: organRequest._id,
     });
 
     // ------------------------------------------
@@ -322,7 +340,13 @@ const respondToOrganRequest = async (req, res) => {
     // ------------------------------------------
 
     if (status === "Accepted") {
-      if (organ.status !== "Available") {
+      const reservedOrgan = await Organ.findOneAndUpdate(
+        { _id: request.organ, status: "Available" },
+        { $set: { status: "Reserved" } },
+        { new: true },
+      );
+
+      if (!reservedOrgan) {
         return res.status(400).json({
           success: false,
           message: "This organ is no longer available",
@@ -330,7 +354,6 @@ const respondToOrganRequest = async (req, res) => {
       }
 
       request.status = "Accepted";
-      organ.status = "Reserved";
     }
 
     // ------------------------------------------
@@ -341,16 +364,21 @@ const respondToOrganRequest = async (req, res) => {
       request.status = "Rejected";
 
       // Organ remains available
-      if (organ.status === "Reserved") {
-        organ.status = "Available";
-      }
+      // A pending request cannot reserve an organ; leave its status unchanged.
     }
 
     request.responseMessage = responseMessage;
     request.respondedAt = new Date();
 
     await request.save();
-    await organ.save();
+
+    await notify({
+      recipientHospital: request.requestingHospital,
+      type: status === "Accepted" ? "RequestApproved" : "RequestRejected",
+      title: `Organ request ${status.toLowerCase()}`,
+      message: responseMessage || `Your organ request was ${status.toLowerCase()}.`,
+      request: request._id,
+    });
 
     const populatedRequest = await OrganRequest.findById(request._id)
       .populate(
@@ -409,6 +437,14 @@ const cancelOrganRequest = async (req, res) => {
     request.respondedAt = new Date();
 
     await request.save();
+
+    await notify({
+      recipientHospital: request.supplyingHospital,
+      type: "RequestUpdated",
+      title: "Organ request cancelled",
+      message: "An organ request has been cancelled by the requesting hospital.",
+      request: request._id,
+    });
 
     return res.status(200).json({
       success: true,
@@ -469,6 +505,13 @@ const completeOrganRequest = async (req, res) => {
       });
     }
 
+    if (organ.status !== "Reserved") {
+      return res.status(400).json({
+        success: false,
+        message: "Only a reserved organ can be marked transplanted",
+      });
+    }
+
     request.status = "Completed";
     request.respondedAt = new Date();
 
@@ -476,6 +519,23 @@ const completeOrganRequest = async (req, res) => {
 
     await request.save();
     await organ.save();
+
+    await Promise.all([
+      notify({
+        recipientHospital: request.requestingHospital,
+        type: "RequestUpdated",
+        title: "Organ request completed",
+        message: "The organ request has been marked as completed.",
+        request: request._id,
+      }),
+      notify({
+        recipientHospital: request.supplyingHospital,
+        type: "RequestUpdated",
+        title: "Organ request completed",
+        message: "The organ request has been marked as completed.",
+        request: request._id,
+      }),
+    ]);
 
     return res.status(200).json({
       success: true,

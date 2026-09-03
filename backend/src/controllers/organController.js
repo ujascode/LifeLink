@@ -1,5 +1,6 @@
 const Organ = require("../models/Organ");
 const Hospital = require("../models/Hospital");
+const mongoose = require("mongoose");
 
 // ==========================================
 // ADD ORGAN
@@ -87,16 +88,33 @@ const createOrgan = async (req, res) => {
 
 const getOrgans = async (req, res) => {
   try {
-    const organs = await Organ.find({
-      status: "Available",
-    })
-      .populate("hospital", "hospitalName email phone city state")
-      .sort({ createdAt: -1 });
+    const filter = {};
+    const requestedStatus = req.query.status;
+
+    if (req.user.role === "admin") {
+      if (requestedStatus) filter.status = requestedStatus;
+    } else if (req.query.mine === "true") {
+      filter.hospital = req.user.id;
+      filter.status = requestedStatus || { $ne: "Removed" };
+    } else {
+      // Exchange search only exposes available organs from verified hospitals.
+      filter.status = "Available";
+      filter.hospital = { $ne: req.user.id };
+    }
+
+    const organs = await Organ.find(filter)
+      .populate("hospital", "hospitalName city state status isVerified")
+      .sort({ createdAt: -1 })
+      .lean();
+
+    const visibleOrgans = req.user.role === "admin"
+      ? organs
+      : organs.filter((organ) => organ.hospital?.status === "Verified" || !organ.hospital?.status);
 
     return res.status(200).json({
       success: true,
-      count: organs.length,
-      organs,
+      count: visibleOrgans.length,
+      organs: visibleOrgans,
     });
   } catch (error) {
     console.error("Get organs error:", error);
@@ -114,9 +132,13 @@ const getOrgans = async (req, res) => {
 
 const getOrganById = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid organ id" });
+    }
+
     const organ = await Organ.findById(req.params.id).populate(
       "hospital",
-      "hospitalName email phone city state",
+      "hospitalName city state status isVerified",
     );
 
     if (!organ) {
@@ -146,6 +168,9 @@ const getOrganById = async (req, res) => {
 
 const updateOrgan = async (req, res) => {
   try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({ success: false, message: "Invalid organ id" });
+    }
     const organ = await Organ.findById(req.params.id);
 
     if (!organ) {
@@ -163,6 +188,11 @@ const updateOrgan = async (req, res) => {
       });
     }
 
+    const hospital = await Hospital.findById(req.user.id).select("isVerified status");
+    if (!hospital || !hospital.isVerified || hospital.status !== "Verified") {
+      return res.status(403).json({ success: false, message: "Only verified hospitals can update organs" });
+    }
+
     const allowedFields = [
       "organType",
       "bloodGroup",
@@ -173,6 +203,10 @@ const updateOrgan = async (req, res) => {
       "status",
       "notes",
     ];
+
+    if (req.body.status !== undefined && !["Available", "Expired", "Removed"].includes(req.body.status)) {
+      return res.status(400).json({ success: false, message: "This organ status can only be changed through the request workflow" });
+    }
 
     allowedFields.forEach((field) => {
       if (req.body[field] !== undefined) {
@@ -220,11 +254,17 @@ const deleteOrgan = async (req, res) => {
       });
     }
 
-    await Organ.findByIdAndDelete(req.params.id);
+    const hospital = await Hospital.findById(req.user.id).select("isVerified status");
+    if (!hospital || !hospital.isVerified || hospital.status !== "Verified") {
+      return res.status(403).json({ success: false, message: "Only verified hospitals can remove organs" });
+    }
+
+    organ.status = "Removed";
+    await organ.save();
 
     return res.status(200).json({
       success: true,
-      message: "Organ deleted successfully",
+      message: "Organ removed successfully",
     });
   } catch (error) {
     console.error("Delete organ error:", error);

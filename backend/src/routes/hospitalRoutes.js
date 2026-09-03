@@ -4,16 +4,17 @@ const {
   getHospitals,
   getHospitalById,
   getMyProfile,
+  getHospitalDashboard,
   updateMyProfile,
   verifyHospital,
 } = require("../controllers/hospitalController");
 
-const authenticate = require("../middleware/authMiddleware");
-const authorizeRoles = require("../middleware/roleMiddleware");
+const { authenticate } = require("../middleware/authMiddleware");
+const { authorizeRoles } = require("../middleware/roleMiddleware");
 
 const router = express.Router();
 
-// Logged-in hospital profile
+// GET LOGGED-IN HOSPITAL PROFILE
 router.get(
   "/profile/me",
   authenticate,
@@ -21,7 +22,7 @@ router.get(
   getMyProfile,
 );
 
-// Update logged-in hospital profile
+// UPDATE LOGGED-IN HOSPITAL PROFILE
 router.put(
   "/profile",
   authenticate,
@@ -29,7 +30,16 @@ router.put(
   updateMyProfile,
 );
 
-// Admin verification
+// GET HOSPITAL DASHBOARD
+router.get(
+  "/dashboard",
+  authenticate,
+  authorizeRoles("hospital"),
+  getHospitalDashboard,
+);
+
+// VERIFY HOSPITAL
+// ADMIN ONLY
 router.put(
   "/:id/verify",
   authenticate,
@@ -37,10 +47,10 @@ router.put(
   verifyHospital,
 );
 
-// Get hospital by ID
+// GET HOSPITAL BY ID
 router.get("/:id", authenticate, getHospitalById);
 
-// Get all hospitals
+// GET ALL HOSPITALS
 router.get("/", authenticate, getHospitals);
 
 module.exports = router;
