@@ -1,0 +1,4 @@
+◇ injected env (6) from .env // tip: ⌘ suppress logs { quiet: true }
+LifeLink backend running on port 5000
+http://localhost:5000
+MongoDB connection failed: querySrv ECONNREFUSED _mongodb._tcp.lifelink.bslnfvz.mongodb.net
