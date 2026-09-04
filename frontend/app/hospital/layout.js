@@ -37,10 +37,11 @@ export default function HospitalLayout({ children }) {
   if (isPublicPage) return children;
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen min-w-0 bg-slate-50">
       <HospitalSidebar />
-
-      <main className="min-h-screen pt-16 md:ml-64 md:pt-0">{children}</main>
+      <main className="min-h-screen min-w-0 overflow-x-hidden pt-14 md:ml-[17.5rem] md:pt-0">
+        {children}
+      </main>
     </div>
   );
 }
