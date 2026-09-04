@@ -91,7 +91,6 @@ export default function AdminLoginPage() {
 
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm p-8">
           <h1 className="text-2xl font-bold text-gray-900">Admin Login</h1>
-          <a href="/forgot-password" className="mt-3 inline-block text-sm font-medium text-blue-600 hover:underline">Forgot password?</a>
 
           <p className="text-sm text-gray-500 mt-2">
             Sign in to manage the LifeLink platform.
@@ -160,6 +159,12 @@ export default function AdminLoginPage() {
               {loading ? "Signing in..." : "Sign In"}
             </button>
           </form>
+
+          <div className="mt-5 text-center">
+            <a href="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline">
+              Forgot password?
+            </a>
+          </div>
 
           {/* BACK */}
 
