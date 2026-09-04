@@ -64,7 +64,6 @@ export default function HospitalLogin() {
           <h2 className="text-xl font-semibold text-gray-800 mt-6">
             Hospital Login
           </h2>
-          <a href="/forgot-password" className="mt-3 inline-block text-sm font-medium text-blue-600 hover:underline">Forgot password?</a>
         </div>
 
         {/* Error */}
@@ -119,6 +118,12 @@ export default function HospitalLogin() {
             {loading ? "Logging in..." : "Login"}
           </button>
         </form>
+
+        <div className="mt-5 text-center">
+          <a href="/forgot-password" className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline">
+            Forgot password?
+          </a>
+        </div>
 
         {/* Register */}
         <div className="text-center mt-6">
