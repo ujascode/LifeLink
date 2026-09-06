@@ -7,11 +7,15 @@ const { hashPassword, comparePassword } = require("../utils/password");
 const { generateToken } = require("../utils/jwt");
 
 const {
+  validateEmail,
   validateHospitalRegistration,
   validateLogin,
 } = require("../validators/authValidator");
 
-const { sendHospitalRegistrationEmail } = require("../services/emailService");
+const {
+  sendHospitalRegistrationEmail,
+  sendPasswordResetEmail,
+} = require("../services/emailService");
 
 // ==========================================
 // HOSPITAL REGISTRATION
@@ -289,28 +293,71 @@ const getCurrentUser = async (req, res) => {
 const requestPasswordReset = async (req, res) => {
   const { email, role = "hospital" } = req.body || {};
   const normalizedEmail = String(email || "").trim().toLowerCase();
-  if (!normalizedEmail || !["hospital", "admin"].includes(role)) {
-    return res.status(400).json({ success: false, message: "A valid email and account type are required" });
+  const genericMessage =
+    "If an account exists for this email, a password reset link has been sent.";
+
+  if (!validateEmail(normalizedEmail) || !["hospital", "admin"].includes(role)) {
+    return res.status(400).json({
+      success: false,
+      message: "A valid email and account type are required",
+    });
   }
 
-  const Model = role === "admin" ? Admin : Hospital;
-  const user = await Model.findOne({ email: normalizedEmail });
-  const response = { success: true, message: "If the account exists, password reset instructions are available." };
-  if (user) {
-    const token = crypto.randomBytes(32).toString("hex");
-    user.resetPasswordToken = crypto.createHash("sha256").update(token).digest("hex");
-    user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
-    await user.save();
-    // There is no mail provider in local development. Never return this in production.
-    if (process.env.NODE_ENV !== "production") response.resetToken = token;
+  try {
+    const Model = role === "admin" ? Admin : Hospital;
+    const user = await Model.findOne({ email: normalizedEmail });
+
+    if (user) {
+      const token = crypto.randomBytes(32).toString("hex");
+      user.resetPasswordToken = crypto
+        .createHash("sha256")
+        .update(token)
+        .digest("hex");
+      user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
+      await user.save();
+
+      try {
+        await sendPasswordResetEmail({
+          email: user.email,
+          token,
+          role,
+          expiresInMinutes: 15,
+        });
+      } catch (emailError) {
+        user.resetPasswordToken = null;
+        user.resetPasswordExpires = null;
+
+        try {
+          await user.save();
+        } catch (cleanupError) {
+          console.error(
+            "Password reset token cleanup failed:",
+            cleanupError.message,
+          );
+        }
+
+        console.error("Password reset email failed:", emailError.message);
+      }
+    }
+
+    return res.json({ success: true, message: genericMessage });
+  } catch (error) {
+    console.error("Password reset request error:", error.message);
+    return res.status(500).json({
+      success: false,
+      message: "Unable to process password reset request",
+    });
   }
-  return res.json(response);
 };
 
 const resetPassword = async (req, res) => {
   const hashedToken = crypto.createHash("sha256").update(req.params.token || "").digest("hex");
   const { password, role = "hospital" } = req.body || {};
-  if (!password || password.length < 6 || !["hospital", "admin"].includes(role)) {
+  if (
+    typeof password !== "string" ||
+    password.length < 6 ||
+    !["hospital", "admin"].includes(role)
+  ) {
     return res.status(400).json({ success: false, message: "Choose a valid account type and password of at least 6 characters" });
   }
   const Model = role === "admin" ? Admin : Hospital;

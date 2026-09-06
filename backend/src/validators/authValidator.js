@@ -35,6 +35,7 @@ const validateLogin = (data) => {
 };
 
 module.exports = {
+  validateEmail,
   validateHospitalRegistration,
   validateLogin,
 };

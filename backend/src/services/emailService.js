@@ -1,6 +1,6 @@
 const nodemailer = require("nodemailer");
 
-const getEmailConfig = () => {
+const getEmailConfig = ({ requireAdminEmail = false } = {}) => {
   const host = process.env.EMAIL_HOST?.trim();
   const port = Number(process.env.EMAIL_PORT || 587);
   const user = process.env.EMAIL_USER?.trim();
@@ -12,7 +12,7 @@ const getEmailConfig = () => {
   if (!process.env.EMAIL_PORT) missing.push("EMAIL_PORT");
   if (!user) missing.push("EMAIL_USER");
   if (!password) missing.push("EMAIL_PASSWORD");
-  if (!adminEmail) missing.push("ADMIN_EMAIL");
+  if (requireAdminEmail && !adminEmail) missing.push("ADMIN_EMAIL");
 
   if (missing.length > 0) {
     throw new Error(
@@ -34,6 +34,23 @@ const getEmailConfig = () => {
   };
 };
 
+const createTransporter = ({ requireAdminEmail = false } = {}) => {
+  const config = getEmailConfig({ requireAdminEmail });
+
+  return {
+    config,
+    transporter: nodemailer.createTransport({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth: {
+        user: config.user,
+        pass: config.password,
+      },
+    }),
+  };
+};
+
 const escapeHtml = (value) =>
   String(value ?? "")
     .replaceAll("&", "&amp;")
@@ -45,16 +62,7 @@ const escapeHtml = (value) =>
 const displayValue = (value) => value || "Not provided";
 
 const sendHospitalRegistrationEmail = async (hospital) => {
-  const config = getEmailConfig();
-  const transporter = nodemailer.createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    auth: {
-      user: config.user,
-      pass: config.password,
-    },
-  });
+  const { config, transporter } = createTransporter({ requireAdminEmail: true });
 
   const hospitalName = displayValue(hospital.hospitalName);
   const email = displayValue(hospital.email);
@@ -102,4 +110,79 @@ const sendHospitalRegistrationEmail = async (hospital) => {
   });
 };
 
-module.exports = { sendHospitalRegistrationEmail };
+const getFrontendUrl = () => {
+  const configuredUrl = (process.env.CLIENT_URL || process.env.FRONTEND_URL || "")
+    .trim()
+    .replace(/\/+$/, "");
+
+  if (!configuredUrl) {
+    throw new Error("Frontend URL is not configured.");
+  }
+
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(configuredUrl);
+  } catch {
+    throw new Error("Frontend URL is invalid.");
+  }
+
+  if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+    throw new Error("Frontend URL must use HTTP or HTTPS.");
+  }
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    ["localhost", "127.0.0.1"].includes(parsedUrl.hostname)
+  ) {
+    throw new Error("Production password reset URL cannot use localhost.");
+  }
+
+  return configuredUrl;
+};
+
+const sendPasswordResetEmail = async ({
+  email,
+  token,
+  role,
+  expiresInMinutes = 15,
+}) => {
+  const { config, transporter } = createTransporter();
+  const frontendUrl = getFrontendUrl();
+  const resetUrl = `${frontendUrl}/reset-password/${encodeURIComponent(token)}?role=${encodeURIComponent(role)}`;
+
+  return transporter.sendMail({
+    from: config.user,
+    to: email,
+    subject: "LifeLink — Password Reset Request",
+    text: [
+      "LifeLink password reset request",
+      "",
+      `Use this link to set a new password: ${resetUrl}`,
+      `This link expires in ${expiresInMinutes} minutes and can only be used once.`,
+      "",
+      "If you did not request this reset, you can safely ignore this email.",
+    ].join("\n"),
+    html: `
+      <div style="font-family:Arial,sans-serif;line-height:1.5;color:#172033;max-width:560px">
+        <div style="display:inline-block;background:#2563eb;color:#fff;font-size:24px;font-weight:700;padding:10px 16px;border-radius:10px;margin-bottom:20px">
+          LifeLink
+        </div>
+        <h2 style="margin:0 0 8px">Password reset request</h2>
+        <p style="margin-top:0">We received a request to reset your LifeLink password.</p>
+        <p>
+          <a href="${escapeHtml(resetUrl)}" style="display:inline-block;background:#2563eb;color:#fff;text-decoration:none;font-weight:700;padding:12px 18px;border-radius:8px">
+            Reset password
+          </a>
+        </p>
+        <p style="color:#5d6b82">
+          This secure link expires in ${escapeHtml(expiresInMinutes)} minutes and can only be used once.
+        </p>
+        <p style="color:#5d6b82;margin-bottom:0">
+          If you did not request this reset, you can safely ignore this email. Your password will remain unchanged.
+        </p>
+      </div>
+    `,
+  });
+};
+
+module.exports = { sendHospitalRegistrationEmail, sendPasswordResetEmail };
