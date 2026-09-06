@@ -11,6 +11,8 @@ const {
   validateLogin,
 } = require("../validators/authValidator");
 
+const { sendHospitalRegistrationEmail } = require("../services/emailService");
+
 // ==========================================
 // HOSPITAL REGISTRATION
 // ==========================================
@@ -69,6 +71,21 @@ const registerHospital = async (req, res) => {
       status: "Pending",
       role: "hospital",
     });
+
+    try {
+      await sendHospitalRegistrationEmail({
+        hospitalName: hospital.hospitalName,
+        email: hospital.email,
+        phone: hospital.phone,
+        address: hospital.address,
+        city: hospital.city,
+        state: hospital.state,
+        pincode: hospital.pincode,
+        createdAt: hospital.createdAt,
+      });
+    } catch (emailError) {
+      console.error("Email notification failed:", emailError.message);
+    }
 
     return res.status(201).json({
       success: true,
