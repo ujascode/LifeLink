@@ -1,4 +1,4 @@
-const nodemailer = require("nodemailer");
+const { Resend } = require("resend");
 
 const getRecipientDomain = (recipient) => {
   const value = String(recipient || "");
@@ -6,11 +6,9 @@ const getRecipientDomain = (recipient) => {
   return separatorIndex > -1 ? value.slice(separatorIndex + 1).toLowerCase() : "unknown";
 };
 
-const getSafeSmtpError = (error, config, recipient) => {
+const getSafeResendError = (error, recipient) => {
   const sensitiveValues = [
-    config?.password,
-    config?.user,
-    config?.adminEmail,
+    process.env.RESEND_API_KEY,
     recipient,
     process.env.JWT_SECRET,
   ].filter(Boolean);
@@ -18,49 +16,36 @@ const getSafeSmtpError = (error, config, recipient) => {
   const message = sensitiveValues.reduce(
     (safeMessage, sensitiveValue) =>
       safeMessage.replaceAll(sensitiveValue, "[redacted]"),
-    String(error?.message || "Unknown SMTP error"),
+    String(error?.message || "Unknown Resend error"),
   );
 
   return {
-    code: error?.code || "UNKNOWN",
-    responseCode: error?.responseCode || null,
-    command: error?.command || null,
+    code: error?.name || error?.code || "RESEND_ERROR",
+    statusCode: error?.statusCode || error?.status || null,
     message,
   };
 };
 
-const logSmtpEnvironment = ({ emailPort }) => {
-  console.info("[email] SMTP configuration:", {
-    "EMAIL_HOST present": Boolean(String(process.env.EMAIL_HOST || "").trim()),
-    EMAIL_PORT: emailPort,
-    "EMAIL_USER present": Boolean(String(process.env.EMAIL_USER || "").trim()),
-    "EMAIL_PASSWORD present": Boolean(
-      String(process.env.EMAIL_PASSWORD || "").trim(),
-    ),
+const logResendEnvironment = ({ apiKey, from, adminEmail }) => {
+  console.info("[email] Resend configuration:", {
+    "Resend configured": Boolean(apiKey && from),
+    "RESEND_API_KEY present": Boolean(apiKey),
+    "EMAIL_FROM present": Boolean(from),
+    "ADMIN_EMAIL present": Boolean(adminEmail),
     "CLIENT_URL present": Boolean(String(process.env.CLIENT_URL || "").trim()),
   });
 };
 
 const getEmailConfig = ({ requireAdminEmail = false } = {}) => {
-  const host = process.env.EMAIL_HOST?.trim();
-  const rawPort = process.env.EMAIL_PORT?.trim();
-  const port = Number(rawPort || 587);
-  const user = process.env.EMAIL_USER?.trim();
-  const password = process.env.EMAIL_PASSWORD;
+  const apiKey = process.env.RESEND_API_KEY?.trim();
+  const from = process.env.EMAIL_FROM?.trim();
   const adminEmail = process.env.ADMIN_EMAIL?.trim();
-  const parsedPort = rawPort
-    ? Number.isInteger(port) && port > 0
-      ? port
-      : "invalid"
-    : "not-set";
 
-  logSmtpEnvironment({ emailPort: parsedPort });
+  logResendEnvironment({ apiKey, from, adminEmail });
 
   const missing = [];
-  if (!host) missing.push("EMAIL_HOST");
-  if (!process.env.EMAIL_PORT) missing.push("EMAIL_PORT");
-  if (!user) missing.push("EMAIL_USER");
-  if (!password) missing.push("EMAIL_PASSWORD");
+  if (!apiKey) missing.push("RESEND_API_KEY");
+  if (!from) missing.push("EMAIL_FROM");
   if (requireAdminEmail && !adminEmail) missing.push("ADMIN_EMAIL");
 
   if (missing.length > 0) {
@@ -69,70 +54,44 @@ const getEmailConfig = ({ requireAdminEmail = false } = {}) => {
     );
   }
 
-  if (!Number.isInteger(port) || port <= 0) {
-    throw new Error("Email service configuration has an invalid EMAIL_PORT.");
-  }
-
   return {
-    host,
-    port,
-    user,
-    password,
+    apiKey,
+    from,
     adminEmail,
-    secure:
-      port === 465
-        ? true
-        : port === 587
-          ? false
-          : String(process.env.EMAIL_SECURE || "").trim().toLowerCase() ===
-            "true",
   };
 };
 
-const createTransporter = ({ requireAdminEmail = false } = {}) => {
+const createResendClient = ({ requireAdminEmail = false } = {}) => {
   const config = getEmailConfig({ requireAdminEmail });
 
-  console.info("[email] SMTP transporter initialized.");
+  console.info("[email] Resend client initialized.");
 
   return {
     config,
-    transporter: nodemailer.createTransport({
-      host: config.host,
-      port: config.port,
-      secure: config.secure,
-      auth: {
-        user: config.user,
-        pass: config.password,
-      },
-    }),
+    resend: new Resend(config.apiKey),
   };
 };
 
-const sendEmail = async ({ transporter, config, message, recipient }) => {
+const sendEmail = async ({ resend, message, recipient }) => {
   try {
-    await transporter.verify();
-    console.info("[email] SMTP transporter verification succeeded.");
-  } catch (error) {
-    console.error(
-      "[email] SMTP transporter verification failed:",
-      getSafeSmtpError(error, config, recipient),
-    );
-    throw error;
-  }
+    const { data, error } = await resend.emails.send(message);
 
-  try {
-    const info = await transporter.sendMail(message);
+    if (error) {
+      throw error;
+    }
+
     console.info(
-      "[email] sendMail succeeded for recipient domain:",
+      "[email] Resend send succeeded for recipient domain:",
       getRecipientDomain(recipient),
       "messageIdPresent:",
-      Boolean(info?.messageId),
+      Boolean(data?.id),
     );
-    return info;
+
+    return data;
   } catch (error) {
     console.error(
-      "[email] sendMail failed:",
-      getSafeSmtpError(error, config, recipient),
+      "[email] Resend send failed:",
+      getSafeResendError(error, recipient),
     );
     throw error;
   }
@@ -149,7 +108,7 @@ const escapeHtml = (value) =>
 const displayValue = (value) => value || "Not provided";
 
 const sendHospitalRegistrationEmail = async (hospital) => {
-  const { config, transporter } = createTransporter({ requireAdminEmail: true });
+  const { config, resend } = createResendClient({ requireAdminEmail: true });
 
   const hospitalName = displayValue(hospital.hospitalName);
   const email = displayValue(hospital.email);
@@ -160,23 +119,26 @@ const sendHospitalRegistrationEmail = async (hospital) => {
   const pincode = displayValue(hospital.pincode);
   const registeredAt = new Date(hospital.createdAt || Date.now()).toISOString();
 
-  return transporter.sendMail({
-    from: config.user,
-    to: config.adminEmail,
-    subject: "LifeLink - New hospital registration",
-    text: [
-      "A new hospital has registered on LifeLink.",
-      "",
-      `Hospital: ${hospitalName}`,
-      `Email: ${email}`,
-      `Phone: ${phone}`,
-      `Address: ${address}`,
-      `City: ${city}`,
-      `State: ${state}`,
-      `Pincode: ${pincode}`,
-      `Registered at: ${registeredAt}`,
-    ].join("\n"),
-    html: `
+  return sendEmail({
+    resend,
+    recipient: config.adminEmail,
+    message: {
+      from: config.from,
+      to: config.adminEmail,
+      subject: "LifeLink - New hospital registration",
+      text: [
+        "A new hospital has registered on LifeLink.",
+        "",
+        `Hospital: ${hospitalName}`,
+        `Email: ${email}`,
+        `Phone: ${phone}`,
+        `Address: ${address}`,
+        `City: ${city}`,
+        `State: ${state}`,
+        `Pincode: ${pincode}`,
+        `Registered at: ${registeredAt}`,
+      ].join("\n"),
+      html: `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#172033">
         <h2 style="margin-bottom:8px">New hospital registration</h2>
         <p style="margin-top:0">A hospital is waiting for administrator review on LifeLink.</p>
@@ -193,7 +155,8 @@ const sendHospitalRegistrationEmail = async (hospital) => {
         </table>
         <p style="margin-bottom:0;color:#5d6b82">Registered at: ${escapeHtml(registeredAt)}</p>
       </div>
-    `,
+      `,
+    },
   });
 };
 
@@ -233,16 +196,15 @@ const sendPasswordResetEmail = async ({
   role,
   expiresInMinutes = 15,
 }) => {
-  const { config, transporter } = createTransporter();
+  const { config, resend } = createResendClient();
   const frontendUrl = getFrontendUrl();
   const resetUrl = `${frontendUrl}/reset-password/${encodeURIComponent(token)}?role=${encodeURIComponent(role)}`;
 
   return sendEmail({
-    transporter,
-    config,
+    resend,
     recipient: email,
     message: {
-      from: config.user,
+      from: config.from,
       to: email,
       subject: "LifeLink — Password Reset Request",
       text: [

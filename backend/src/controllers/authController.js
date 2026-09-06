@@ -337,7 +337,7 @@ const requestPasswordReset = async (req, res) => {
         }
 
         console.error(
-          "Password reset email failed; inspect SMTP diagnostics above.",
+          "Password reset email failed; inspect email diagnostics above.",
         );
       }
     }
