@@ -1,11 +1,60 @@
 const nodemailer = require("nodemailer");
 
+const getRecipientDomain = (recipient) => {
+  const value = String(recipient || "");
+  const separatorIndex = value.lastIndexOf("@");
+  return separatorIndex > -1 ? value.slice(separatorIndex + 1).toLowerCase() : "unknown";
+};
+
+const getSafeSmtpError = (error, config, recipient) => {
+  const sensitiveValues = [
+    config?.password,
+    config?.user,
+    config?.adminEmail,
+    recipient,
+    process.env.JWT_SECRET,
+  ].filter(Boolean);
+
+  const message = sensitiveValues.reduce(
+    (safeMessage, sensitiveValue) =>
+      safeMessage.replaceAll(sensitiveValue, "[redacted]"),
+    String(error?.message || "Unknown SMTP error"),
+  );
+
+  return {
+    code: error?.code || "UNKNOWN",
+    responseCode: error?.responseCode || null,
+    command: error?.command || null,
+    message,
+  };
+};
+
+const logSmtpEnvironment = ({ emailPort }) => {
+  console.info("[email] SMTP configuration:", {
+    "EMAIL_HOST present": Boolean(String(process.env.EMAIL_HOST || "").trim()),
+    EMAIL_PORT: emailPort,
+    "EMAIL_USER present": Boolean(String(process.env.EMAIL_USER || "").trim()),
+    "EMAIL_PASSWORD present": Boolean(
+      String(process.env.EMAIL_PASSWORD || "").trim(),
+    ),
+    "CLIENT_URL present": Boolean(String(process.env.CLIENT_URL || "").trim()),
+  });
+};
+
 const getEmailConfig = ({ requireAdminEmail = false } = {}) => {
   const host = process.env.EMAIL_HOST?.trim();
-  const port = Number(process.env.EMAIL_PORT || 587);
+  const rawPort = process.env.EMAIL_PORT?.trim();
+  const port = Number(rawPort || 587);
   const user = process.env.EMAIL_USER?.trim();
   const password = process.env.EMAIL_PASSWORD;
   const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  const parsedPort = rawPort
+    ? Number.isInteger(port) && port > 0
+      ? port
+      : "invalid"
+    : "not-set";
+
+  logSmtpEnvironment({ emailPort: parsedPort });
 
   const missing = [];
   if (!host) missing.push("EMAIL_HOST");
@@ -30,12 +79,20 @@ const getEmailConfig = ({ requireAdminEmail = false } = {}) => {
     user,
     password,
     adminEmail,
-    secure: process.env.EMAIL_SECURE === "true" || port === 465,
+    secure:
+      port === 465
+        ? true
+        : port === 587
+          ? false
+          : String(process.env.EMAIL_SECURE || "").trim().toLowerCase() ===
+            "true",
   };
 };
 
 const createTransporter = ({ requireAdminEmail = false } = {}) => {
   const config = getEmailConfig({ requireAdminEmail });
+
+  console.info("[email] SMTP transporter initialized.");
 
   return {
     config,
@@ -49,6 +106,36 @@ const createTransporter = ({ requireAdminEmail = false } = {}) => {
       },
     }),
   };
+};
+
+const sendEmail = async ({ transporter, config, message, recipient }) => {
+  try {
+    await transporter.verify();
+    console.info("[email] SMTP transporter verification succeeded.");
+  } catch (error) {
+    console.error(
+      "[email] SMTP transporter verification failed:",
+      getSafeSmtpError(error, config, recipient),
+    );
+    throw error;
+  }
+
+  try {
+    const info = await transporter.sendMail(message);
+    console.info(
+      "[email] sendMail succeeded for recipient domain:",
+      getRecipientDomain(recipient),
+      "messageIdPresent:",
+      Boolean(info?.messageId),
+    );
+    return info;
+  } catch (error) {
+    console.error(
+      "[email] sendMail failed:",
+      getSafeSmtpError(error, config, recipient),
+    );
+    throw error;
+  }
 };
 
 const escapeHtml = (value) =>
@@ -150,19 +237,23 @@ const sendPasswordResetEmail = async ({
   const frontendUrl = getFrontendUrl();
   const resetUrl = `${frontendUrl}/reset-password/${encodeURIComponent(token)}?role=${encodeURIComponent(role)}`;
 
-  return transporter.sendMail({
-    from: config.user,
-    to: email,
-    subject: "LifeLink — Password Reset Request",
-    text: [
-      "LifeLink password reset request",
-      "",
-      `Use this link to set a new password: ${resetUrl}`,
-      `This link expires in ${expiresInMinutes} minutes and can only be used once.`,
-      "",
-      "If you did not request this reset, you can safely ignore this email.",
-    ].join("\n"),
-    html: `
+  return sendEmail({
+    transporter,
+    config,
+    recipient: email,
+    message: {
+      from: config.user,
+      to: email,
+      subject: "LifeLink — Password Reset Request",
+      text: [
+        "LifeLink password reset request",
+        "",
+        `Use this link to set a new password: ${resetUrl}`,
+        `This link expires in ${expiresInMinutes} minutes and can only be used once.`,
+        "",
+        "If you did not request this reset, you can safely ignore this email.",
+      ].join("\n"),
+      html: `
       <div style="font-family:Arial,sans-serif;line-height:1.5;color:#172033;max-width:560px">
         <div style="display:inline-block;background:#2563eb;color:#fff;font-size:24px;font-weight:700;padding:10px 16px;border-radius:10px;margin-bottom:20px">
           LifeLink
@@ -181,7 +272,8 @@ const sendPasswordResetEmail = async ({
           If you did not request this reset, you can safely ignore this email. Your password will remain unchanged.
         </p>
       </div>
-    `,
+      `,
+    },
   });
 };
 
