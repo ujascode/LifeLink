@@ -39,7 +39,11 @@ export default function HospitalDashboard() {
           router.replace("/hospital/login");
           return;
         }
-        setError(err.response?.data?.message || "Unable to load dashboard.");
+        setError(
+          err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
+            ? "The dashboard request timed out. Please try again."
+            : err.response?.data?.message || "Unable to load dashboard.",
+        );
       } finally {
         setLoading(false);
       }

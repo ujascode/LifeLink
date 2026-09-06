@@ -1,5 +1,6 @@
 const express = require("express");
 const cors = require("cors");
+const mongoose = require("mongoose");
 const connectDB = require("./config/db");
 
 require("dotenv").config();
@@ -17,8 +18,6 @@ const PORT = process.env.PORT || 5000;
 // ==========================================
 // DATABASE
 // ==========================================
-
-connectDB();
 
 // ==========================================
 // MIDDLEWARE
@@ -46,9 +45,14 @@ app.get("/", (req, res) => {
 });
 
 app.get("/api/health", (req, res) => {
-  res.json({
-    success: true,
-    message: "LifeLink API is healthy",
+  const databaseReady = mongoose.connection.readyState === 1;
+
+  res.status(databaseReady ? 200 : 503).json({
+    success: databaseReady,
+    message: databaseReady
+      ? "LifeLink API is healthy"
+      : "LifeLink API database is not ready",
+    database: databaseReady ? "ready" : "not ready",
   });
 });
 
@@ -76,8 +80,19 @@ app.use((error, req, res, next) => {
 // SERVER
 // ==========================================
 
-app.listen(PORT, () => {
-  console.log(`LifeLink backend running on port ${PORT}`);
+const startServer = async () => {
+  try {
+    await connectDB();
 
-  console.log(`http://localhost:${PORT}`);
-});
+    app.listen(PORT, () => {
+      console.log(`LifeLink backend running on port ${PORT}`);
+
+      console.log(`http://localhost:${PORT}`);
+    });
+  } catch (error) {
+    console.error("LifeLink backend startup aborted because MongoDB is unavailable.");
+    process.exitCode = 1;
+  }
+};
+
+startServer();
