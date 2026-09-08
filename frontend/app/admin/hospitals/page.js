@@ -133,6 +133,66 @@ export default function AdminHospitalsPage() {
   };
 
   // =========================================================
+  // DELETE HOSPITAL
+  // ==========================================
+
+  const deleteHospital = async (hospitalId) => {
+    const token = localStorage.getItem("lifelink_token");
+
+    if (!token) {
+      router.replace("/admin/login");
+      return;
+    }
+
+    // Show confirmation dialog
+    if (
+      !window.confirm(
+        "Delete Hospital?\n\nThis will permanently delete the hospital and all of its associated organ, request, and notification data. This action cannot be undone."
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setProcessingId(hospitalId);
+      setError("");
+      setSuccess("");
+
+      const response = await fetch(`${API_URL}/admin/hospitals/${hospitalId}`, {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+
+      if (response.status === 401) {
+        localStorage.removeItem("lifelink_token");
+        localStorage.removeItem("lifelink_user");
+
+        router.replace("/admin/login");
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error(data.message || "Unable to delete hospital.");
+      }
+
+      // Remove the hospital from the list
+      setHospitals((current) => current.filter((h) => h._id !== hospitalId));
+
+      setSuccess(data.message || "Hospital deleted successfully.");
+    } catch (err) {
+      console.error(err);
+
+      setError(err.message || "Unable to delete hospital.");
+    } finally {
+      setProcessingId(null);
+    }
+  };
+
+  // =========================================================
   // STATUS
   // =========================================================
 
@@ -344,6 +404,14 @@ export default function AdminHospitalsPage() {
                                 : "Verify"}
                             </button>
                           )}
+
+                          <button
+                            disabled={processingId === hospital._id}
+                            onClick={() => deleteHospital(hospital._id)}
+                            className="px-4 py-2 rounded-lg bg-red-600 text-white text-sm font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {processingId === hospital._id ? "Deleting..." : "Delete"}
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -2,6 +2,8 @@ const mongoose = require("mongoose");
 const Hospital = require("../models/Hospital");
 const Organ = require("../models/Organ");
 const OrganRequest = require("../models/OrganRequest");
+const Notification = require("../models/Notification");
+const Donor = require("../models/Donor");
 
 const getAdminDashboard = async (req, res) => {
   try {
@@ -73,4 +75,84 @@ const getAdminRequestById = async (req, res) => {
   return res.json({ success: true, request });
 };
 
-module.exports = { getAdminDashboard, getAdminRequests, getAdminRequestById };
+// ==========================================
+// DELETE HOSPITAL
+// ADMIN ONLY
+// ==========================================
+
+const deleteHospital = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid hospital id",
+      });
+    }
+
+    const hospital = await Hospital.findById(req.params.id);
+
+    if (!hospital) {
+      return res.status(404).json({
+        success: false,
+        message: "Hospital not found",
+      });
+    }
+
+    // Start a session for transaction
+    const session = await mongoose.startSession();
+    session.startTransaction();
+
+    try {
+      // Delete associated organs
+      await Organ.deleteMany({ hospital: hospital._id }, { session });
+
+      // Delete associated organ requests (where hospital is either requesting or supplying)
+      await OrganRequest.deleteMany(
+        {
+          $or: [
+            { requestingHospital: hospital._id },
+            { supplyingHospital: hospital._id }
+          ]
+        },
+        { session }
+      );
+
+      // Delete associated notifications
+      await Notification.deleteMany(
+        { recipientHospital: hospital._id },
+        { session }
+      );
+
+      // Delete associated donors
+      await Donor.deleteMany(
+        { hospital: hospital._id },
+        { session }
+      );
+
+      // Delete the hospital itself
+      await Hospital.deleteOne({ _id: hospital._id }, { session });
+
+      // Commit transaction
+      await session.commitTransaction();
+      session.endSession();
+
+      return res.json({
+        success: true,
+        message: "Hospital and all associated data deleted successfully",
+      });
+    } catch (error) {
+      // Abort transaction on error
+      await session.abortTransaction();
+      session.endSession();
+      throw error;
+    }
+  } catch (error) {
+    console.error("Delete hospital error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while deleting hospital",
+    });
+  }
+};
+
+module.exports = { getAdminDashboard, getAdminRequests, getAdminRequestById, deleteHospital };
