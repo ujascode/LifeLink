@@ -34,6 +34,128 @@ const getHospitals = async (req, res) => {
 // ==========================================
 
 const getHospitalById = async (req, res) => {
+
+// ==========================================
+// GET NEARBY HOSPITALS
+// ==========================================
+
+const getNearbyHospitals = async (req, res) => {
+  try {
+    const { latitude, longitude, radius = 10 } = req.query;
+
+    // Validate parameters
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    const rad = parseFloat(radius);
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid latitude. Must be a number between -90 and 90.",
+      });
+    }
+
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid longitude. Must be a number between -180 and 180.",
+      });
+    }
+
+    if (isNaN(rad) || rad <= 0 || rad > 100) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid radius. Must be a positive number between 0 and 100 km.",
+      });
+    }
+
+    // Find hospitals using geospatial query
+    // Since we don't have a 2dsphere index on latitude/longitude fields,
+    // we'll use MongoDB aggregation with $geoNear or calculate distances manually
+    // For simplicity and compatibility, we'll calculate distances in memory after filtering
+
+    // First, get all verified hospitals
+    const hospitals = await Hospital.find({
+      status: "Verified",
+      isVerified: true,
+    })
+      .select(
+        "_id hospitalName email phone address city state latitude longitude"
+      )
+      .lean(); // Use lean() for better performance
+
+    // If no hospitals found, return empty result
+    if (!hospitals || hospitals.length === 0) {
+      return res.json({
+        success: true,
+        count: 0,
+        hospitals: [],
+      });
+    }
+
+    // Calculate distance for each hospital and filter by radius
+    const hospitalsWithDistance = hospitals
+      .map((hospital) => {
+        // Skip hospitals without coordinates
+        if (
+          hospital.latitude === undefined ||
+          hospital.longitude === undefined ||
+          hospital.latitude === null ||
+          hospital.longitude === null ||
+          isNaN(hospital.latitude) ||
+          isNaN(hospital.longitude)
+        ) {
+          return null;
+        }
+
+        // Calculate distance using haversine formula
+        const R = 6378.1; // Earth's radius in km
+        const dLat = ((hospital.latitude - lat) * Math.PI) / 180;
+        const dLng = ((hospital.longitude - lng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat * Math.PI) / 180) *
+            Math.cos((hospital.latitude * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c; // Distance in km
+
+        // Only include hospitals within the specified radius
+        if (distance <= rad) {
+          return {
+            id: hospital._id,
+            hospitalName: hospital.hospitalName,
+            city: hospital.city,
+            state: hospital.state,
+            address: hospital.address,
+            phone: hospital.phone,
+            latitude: hospital.latitude,
+            longitude: hospital.longitude,
+            distance: parseFloat(distance.toFixed(2)), // Round to 2 decimal places
+          };
+        }
+        return null;
+      })
+      .filter((hospital) => hospital !== null) // Remove null values
+      .sort((a, b) => a.distance - b.distance); // Sort by distance ascending
+
+    // Limit results to prevent overload
+    const limitedHospitals = hospitalsWithDistance.slice(0, 50);
+
+    return res.json({
+      success: true,
+      count: limitedHospitals.length,
+      hospitals: limitedHospitals,
+    });
+  } catch (error) {
+    console.error("Get nearby hospitals error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching nearby hospitals",
+    });
+  }
+};
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: "Invalid hospital id" });
@@ -322,4 +444,5 @@ module.exports = {
   getHospitalDashboard,
   updateMyProfile,
   verifyHospital,
+  getNearbyHospitals,
 };

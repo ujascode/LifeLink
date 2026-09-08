@@ -7,6 +7,7 @@ const {
   getHospitalDashboard,
   updateMyProfile,
   verifyHospital,
+  getNearbyHospitals,
 } = require("../controllers/hospitalController");
 
 const { authenticate } = require("../middleware/authMiddleware");
@@ -46,6 +47,9 @@ router.put(
   authorizeRoles("admin"),
   verifyHospital,
 );
+
+// GET NEARBY HOSPITALS
+router.get("/nearby", authenticate, getNearbyHospitals);
 
 // GET HOSPITAL BY ID
 router.get("/:id", authenticate, getHospitalById);
