@@ -103,7 +103,7 @@ const getOrgans = async (req, res) => {
     }
 
     const organs = await Organ.find(filter)
-      .populate("hospital", "hospitalName city state status isVerified")
+      .populate("hospital", "hospitalName city state status isVerified latitude longitude")
       .sort({ createdAt: -1 })
       .lean();
 
@@ -138,7 +138,7 @@ const getOrganById = async (req, res) => {
 
     const organ = await Organ.findById(req.params.id).populate(
       "hospital",
-      "hospitalName city state status isVerified",
+      "hospitalName city state status isVerified latitude longitude",
     );
 
     if (!organ) {

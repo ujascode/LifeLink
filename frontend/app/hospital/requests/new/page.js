@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -42,6 +42,9 @@ export default function NewOrganRequestPage() {
     urgency: "Critical",
     reason: "",
   });
+
+  const leafletMapRef = useRef(null);
+  const markersRef = useRef(null);
 
   // =========================================================
   // AUTHENTICATION
@@ -215,6 +218,92 @@ export default function NewOrganRequestPage() {
       setSubmitting(false);
     }
   };
+
+  // =========================================================
+  // MAP INITIALIZATION
+  // =========================================================
+
+  const initializeMap = useCallback(() => {
+    // Dynamically import Leaflet to avoid SSR issues
+    import('leaflet').then(L => {
+      // Load Leaflet CSS if not already loaded
+      if (!document.querySelector('link[href*="leaflet.css"]')) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+        document.head.appendChild(link);
+      }
+
+      if (!leafletMapRef.current) return;
+
+      // Set up the map
+      const map = L.map(leafletMapRef.current, {
+        zoomControl: false
+      });
+
+      // Add OpenStreetMap tile layer
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+      }).addTo(map);
+
+      // Add zoom control
+      L.control.zoom({ position: 'topright' }).addTo(map);
+
+      // Clear existing markers
+      if (markersRef.current) {
+        markersRef.current.clearLayers();
+      } else {
+        markersRef.current = L.layerGroup().addTo(map);
+      }
+
+      // Add markers for each organ's hospital
+      const hospitalLocations = [];
+      filteredOrgans.forEach(organ => {
+        // Check if organ has hospital and hospital has latitude and longitude
+        if (organ.hospital && organ.hospital.latitude !== undefined && organ.hospital.longitude !== undefined) {
+          const marker = L.marker([organ.hospital.latitude, organ.hospital.longitude]).addTo(markersRef.current);
+
+          marker.bindPopup(`
+            <b>${organ.hospital.hospitalName}</b><br/>
+            ${organ.hospital.address}, ${organ.hospital.city}<br/>
+            Organ: ${organ.organType} (${organ.bloodGroup})
+          `);
+
+          hospitalLocations.push([organ.hospital.latitude, organ.hospital.longitude]);
+        }
+      });
+
+      // Fit bounds to show all markers
+      if (hospitalLocations.length > 0) {
+        const bounds = L.latLngBounds(hospitalLocations);
+        map.fitBounds(bounds, { padding: [50, 50] });
+      } else {
+        // If no hospital locations, set a default view
+        map.setView([0, 0], 2);
+      }
+    }).catch(err => {
+      console.error('Error loading Leaflet:', err);
+      setError('Failed to load map library');
+    });
+  }, [filteredOrgans]);
+
+  // Initialize map when filteredOrgans data changes
+  useEffect(() => {
+    if (filteredOrgans.length > 0) {
+      initializeMap();
+    }
+  }, [filteredOrgans, initializeMap]);
+
+  // Clean up Leaflet map on unmount
+  useEffect(() => {
+    return () => {
+      if (leafletMapRef.current && leafletMapRef.current._leafletMap) {
+        leafletMapRef.current._leafletMap.remove();
+        leafletMapRef.current = null;
+      }
+    };
+  }, []);
 
   // =========================================================
   // LOGOUT
@@ -395,6 +484,19 @@ export default function NewOrganRequestPage() {
                 } found`}
           </div>
         </div>
+
+        {/* Map of Available Organs */}
+        {!loading && filteredOrgans.length > 0 && (
+          <div className="col-span-full bg-white rounded-2xl border shadow-sm p-6 mb-6">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              Map of Available Organs
+            </h3>
+            <div
+              ref={leafletMapRef}
+              className="h-[400px] w-full rounded-lg border border-gray-200"
+            />
+          </div>
+        )}
 
         {/* ===================================================
             ORGAN RESULTS
