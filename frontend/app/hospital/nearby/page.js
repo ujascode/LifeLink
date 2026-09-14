@@ -243,6 +243,12 @@ const NearbyHospitalsPage = () => {
         {error && (
           <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">
             <p>{error}</p>
+            <button
+              onClick={fetchNearbyHospitals}
+              className="mt-2 bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium"
+            >
+              Retry
+            </button>
           </div>
         )}
 

@@ -1,0 +1,935 @@
+warning: in the working copy of 'frontend/app/hospital/nearby/page.js', LF will be replaced by CRLF the next time Git touches it
+[1mdiff --git a/frontend/app/hospital/nearby/page.js b/frontend/app/hospital/nearby/page.js[m
+[1mindex 71709c9..d7f0e0f 100644[m
+[1m--- a/frontend/app/hospital/nearby/page.js[m
+[1m+++ b/frontend/app/hospital/nearby/page.js[m
+[36m@@ -1,490 +1,434 @@[m
+ "use client";[m
+ [m
+[31m-import { useEffect, useState, useRef } from "react";[m
+[31m-import { useRouter } from "next/navigation";[m
+[31m-import Script from "next/script";[m
+[32m+[m[32mimport { useState, useEffect, useRef, useCallback } from 'react';[m
+[32m+[m[32mimport Link from 'next/link';[m
+[32m+[m[32mimport Image from 'next/image';[m
+ [m
+[31m-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";[m
+[31m-[m
+[31m-export default function NearbyHospitalsPage() {[m
+[31m-  const router = useRouter();[m
+[31m-  const mapRef = useRef(null);[m
+[32m+[m[32mconst NearbyHospitalsPage = () => {[m
+   const [hospitals, setHospitals] = useState([]);[m
+[31m-  const [loading, setLoading] = useState(true);[m
+[31m-  const [error, setError] = useState("");[m
+[31m-  const [userLocation, setUserLocation] = useState(null);[m
+[32m+[m[32m  const [radius, setRadius] = useState(10);[m
+[32m+[m[32m  const [userLocation, setUserLocation] = useState({ latitude: undefined, longitude: undefined });[m
+[32m+[m[32m  const [loading, setLoading] = useState(false);[m
+[32m+[m[32m  const [error, setError] = useState(null);[m
+   const [selectedHospital, setSelectedHospital] = useState(null);[m
+[31m-  const [radius, setRadius] = useState(10); // Default 10 km[m
+[31m-  const [map, setMap] = useState(null);[m
+[31m-  const [markers, setMarkers] = useState([]);[m
+[31m-[m
+[31m-  // Authentication check[m
+[31m-  useEffect(() => {[m
+[31m-    const token = localStorage.getItem("lifelink_token");[m
+[31m-    if (!token) {[m
+[31m-      router.replace("/hospital/login");[m
+[31m-    }[m
+[31m-  }, [router]);[m
+[32m+[m[32m  const leafletMapRef = useRef(null);[m
+[32m+[m[32m  const markersRef = useRef(null);[m
+ [m
+[31m-  // Get user's current location[m
+[31m-  useEffect(() => {[m
+[32m+[m[32m  // Get user location using Geolocation API[m
+[32m+[m[32m  const getUserLocation = useCallback(() => {[m
+     if (!navigator.geolocation) {[m
+[31m-      setError("Geolocation is not supported by your browser");[m
+[31m-      setLoading(false);[m
+[32m+[m[32m      setError('Geolocation is not supported by your browser');[m
+       return;[m
+     }[m
+ [m
+[32m+[m[32m    setLoading(true);[m
+     navigator.geolocation.getCurrentPosition([m
+       (position) => {[m
+[31m-        const { latitude, longitude } = position.coords;[m
+[31m-        setUserLocation({ latitude, longitude });[m
+[31m-        // Initialize map when we have user location[m
+[31m-        if (window.google) {[m
+[31m-          initializeMap();[m
+[31m-        }[m
+[32m+[m[32m        setUserLocation({[m
+[32m+[m[32m          latitude: position.coords.latitude,[m
+[32m+[m[32m          longitude: position.coords.longitude[m
+[32m+[m[32m        });[m
+[32m+[m[32m        setLoading(false);[m
+       },[m
+       (error) => {[m
+[31m-        setError(`Unable to get your location: ${error.message}`);[m
+[32m+[m[32m        setError(`Error getting location: ${error.message}`);[m
+         setLoading(false);[m
+[32m+[m[32m        // Set a default location (New York City coordinates) for demo purposes[m
+[32m+[m[32m        setUserLocation({ latitude: 40.7128, longitude: -74.0060 });[m
+       }[m
+     );[m
+   }, []);[m
+ [m
+[31m-  // Initialize Google Map[m
+[31m-  const initializeMap = () => {[m
+[31m-    if (!userLocation || !mapRef.current) return;[m
+[31m-[m
+[31m-    try {[m
+[31m-      const mapInstance = new window.google.maps.Map(mapRef.current, {[m
+[31m-        center: { lat: userLocation.latitude, lng: userLocation.longitude },[m
+[31m-        zoom: 13,[m
+[31m-        mapTypeId: "roadmap",[m
+[31m-      });[m
+[31m-[m
+[31m-      setMap(mapInstance);[m
+[31m-[m
+[31m-      // Add marker for user's location[m
+[31m-      new window.google.maps.Marker({[m
+[31m-        position: { lat: userLocation.latitude, lng: userLocation.longitude },[m
+[31m-        map: mapInstance,[m
+[31m-        title: "Your Location",[m
+[31m-        icon: {[m
+[31m-          path: window.google.maps.SymbolPath.CIRCLE,[m
+[31m-          scale: 8,[m
+[31m-          fillColor: "#4285f4",[m
+[31m-          fillOpacity: 0.8,[m
+[31m-          strokeColor: "white",[m
+[31m-          strokeWeight: 2,[m
+[31m-        },[m
+[31m-      });[m
+[31m-[m
+[31m-      // Fetch nearby hospitals[m
+[31m-      fetchNearbyHospitals();[m
+[31m-    } catch (err) {[m
+[31m-      setError(`Error initializing map: ${err.message}`);[m
+[31m-      setLoading(false);[m
+[31m-    }[m
+[31m-  };[m
+[31m-[m
+   // Fetch nearby hospitals from API[m
+[31m-  const fetchNearbyHospitals = async () => {[m
+[31m-    if (!userLocation) return;[m
+[32m+[m[32m  const fetchNearbyHospitals = useCallback(async () => {[m
+[32m+[m[32m    if (userLocation.latitude === undefined || userLocation.longitude === undefined) {[m
+[32m+[m[32m      return;[m
+[32m+[m[32m    }[m
+ [m
+[32m+[m[32m    setLoading(true);[m
+[32m+[m[32m    setError(null);[m
+     try {[m
+[31m-      setLoading(true);[m
+[31m-      setError("");[m
+[31m-[m
+       const response = await fetch([m
+[31m-        `${API_URL}/hospitals/nearby?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radius=${radius}`,[m
+[31m-        {[m
+[31m-          headers: {[m
+[31m-            Authorization: `Bearer ${localStorage.getItem("lifelink_token")}`,[m
+[31m-          },[m
+[31m-        }[m
+[32m+[m[32m        `${process.env.NEXT_PUBLIC_API_URL}/hospitals/nearby?latitude=${userLocation.latitude}&longitude=${userLocation.longitude}&radius=${radius}`[m
+       );[m
+ [m
+[31m-      const data = await response.json();[m
+[31m-[m
+[31m-      if (response.status === 401) {[m
+[31m-        localStorage.removeItem("lifelink_token");[m
+[31m-        localStorage.removeItem("lifelink_user");[m
+[31m-        router.replace("/hospital/login");[m
+[31m-        return;[m
+[31m-      }[m
+[31m-[m
+       if (!response.ok) {[m
+[31m-        throw new Error(data.message || "Failed to fetch nearby hospitals");[m
+[32m+[m[32m        throw new Error(`Failed to fetch hospitals: ${response.statusText}`);[m
+       }[m
+ [m
+[32m+[m[32m      const data = await response.json();[m
+       setHospitals(data.hospitals || []);[m
+[31m-      setLoading(false);[m
+[31m-[m
+[31m-      // Update map markers[m
+[31m-      if (window.google && map) {[m
+[31m-        updateMapMarkers(data.hospitals || []);[m
+[31m-      }[m
+     } catch (err) {[m
+[31m-      setError(err.message || "Unable to fetch nearby hospitals");[m
+[32m+[m[32m      setError(err.message);[m
+[32m+[m[32m      setHospitals([]);[m
+[32m+[m[32m    } finally {[m
+       setLoading(false);[m
+     }[m
+[31m-  };[m
+[31m-[m
+[31m-  // Update map markers with hospital data[m
+[31m-  const updateMapMarkers = (hospitalData) => {[m
+[31m-    // Clear existing markers[m
+[31m-    markers.forEach((marker) => marker.setMap(null));[m
+[31m-    setMarkers([]);[m
+[31m-[m
+[31m-    if (!window.google || !map) return;[m
+[31m-[m
+[31m-    const newMarkers = hospitalData.map((hospital) => {[m
+[31m-      const marker = new window.google.maps.Marker({[m
+[31m-        position: {[m
+[31m-          lat: hospital.latitude,[m
+[31m-          lng: hospital.longitude,[m
+[31m-        },[m
+[31m-        map: map,[m
+[31m-        title: hospital.hospitalName,[m
+[31m-        icon: {[m
+[31m-          url: "http://maps.google.com/mapfiles/ms/icons/hospital.png",[m
+[31m-          scaledSize: new window.google.maps.Size(32, 32),[m
+[31m-        },[m
+[31m-      });[m
+[32m+[m[32m  }, [userLocation.latitude, userLocation.longitude, radius]);[m
+[32m+[m
+[32m+[m[32m  // Initialize Leaflet map[m
+[32m+[m[32m  const initializeMap = useCallback(() => {[m
+[32m+[m[32m    // Dynamically import Leaflet to avoid SSR issues[m
+[32m+[m[32m    import('leaflet').then(L => {[m
+[32m+[m[32m      // Load Leaflet CSS if not already loaded[m
+[32m+[m[32m      if (!document.querySelector('link[href*="leaflet.css"]')) {[m
+[32m+[m[32m        const link = document.createElement('link');[m
+[32m+[m[32m        link.rel = 'stylesheet';[m
+[32m+[m[32m        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';[m
+[32m+[m[32m        document.head.appendChild(link);[m
+[32m+[m[32m      }[m
+ [m
+[31m-      // Add click listener to marker[m
+[31m-      marker.addListener("click", () => {[m
+[31m-        setSelectedHospital(hospital);[m
+[31m-        // Open info window[m
+[31m-        const infoWindow = new window.google.maps.InfoWindow({[m
+[31m-          content: `[m
+[31m-            <div style="min-width: 200px;">[m
+[31m-              <h4>${hospital.hospitalName}</h4>[m
+[31m-              <p><strong>Distance:</strong> ${hospital.distance} km</p>[m
+[31m-              <p><strong>Address:</strong> ${hospital.address}, ${hospital.city}, ${hospital.state}</p>[m
+[31m-              <p><strong>Phone:</strong> ${hospital.phone || "N/A"}</p>[m
+[31m-              ${hospital.email ? `<p><strong>Email:</strong> ${hospital.email}</p>` : ""}[m
+[31m-            </div>[m
+[31m-          `,[m
+[32m+[m[32m      if (!leafletMapRef.current) return;[m
+[32m+[m
+[32m+[m[32m      // Set up the map[m
+[32m+[m[32m      const map = L.map(leafletMapRef.current, {[m
+[32m+[m[32m        zoomControl: false[m
+[32m+[m[32m      }).setView([userLocation.latitude, userLocation.longitude], 13);[m
+[32m+[m
+[32m+[m[32m      // Add OpenStreetMap tile layer[m
+[32m+[m[32m      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {[m
+[32m+[m[32m        maxZoom: 19,[m
+[32m+[m[32m        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'[m
+[32m+[m[32m      }).addTo(map);[m
+[32m+[m
+[32m+[m[32m      // Add zoom control[m
+[32m+[m[32m      L.control.zoom({ position: 'topright' }).addTo(map);[m
+[32m+[m
+[32m+[m[32m      // Store map reference[m
+[32m+[m[32m      leafletMapRef.current._leafletMap = map;[m
+[32m+[m[32m      markersRef.current = L.layerGroup().addTo(map);[m
+[32m+[m
+[32m+[m[32m      // Add user location marker[m
+[32m+[m[32m      const userMarker = L.circleMarker([userLocation.latitude, userLocation.longitude], {[m
+[32m+[m[32m        radius: 8,[m
+[32m+[m[32m        fillColor: '#1976d2',[m
+[32m+[m[32m        color: '#fff',[m
+[32m+[m[32m        weight: 2,[m
+[32m+[m[32m        opacity: 1,[m
+[32m+[m[32m        fillOpacity: 0.8[m
+[32m+[m[32m      }).addTo(map);[m
+[32m+[m[32m      userMarker.bindPopup('<b>Your Location</b>').openPopup();[m
+[32m+[m
+[32m+[m[32m      // Add hospital markers[m
+[32m+[m[32m      hospitals.forEach(hospital => {[m
+[32m+[m[32m        const marker = L.marker([hospital.latitude, hospital.longitude]).addTo(markersRef.current);[m
+[32m+[m
+[32m+[m[32m        marker.bindPopup(`[m
+[32m+[m[32m          <b>${hospital.hospitalName}</b><br/>[m
+[32m+[m[32m          ${hospital.address}, ${hospital.city}<br/>[m
+[32m+[m[32m          Distance: ${hospital.distance} km<br/>[m
+[32m+[m[32m          ${hospital.phone ? `<p><strong>Phone:</strong> ${hospital.phone}</p>` : ''}[m
+[32m+[m[32m          ${hospital.email ? `<p><strong>Email:</strong> ${hospital.email}</p>` : ''}[m
+[32m+[m[32m        `);[m
+[32m+[m
+[32m+[m[32m        // Handle marker click[m
+[32m+[m[32m        marker.on('click', () => {[m
+[32m+[m[32m          setSelectedHospital(hospital);[m
+[32m+[m[32m          map.setView([hospital.latitude, hospital.longitude], 15);[m
+[32m+[m[32m          marker.openPopup();[m
+         });[m
+[31m-        infoWindow.open(map, marker);[m
+       });[m
+ [m
+[31m-      return marker;[m
+[32m+[m[32m      // Fit bounds to show all markers and user location[m
+[32m+[m[32m      if (hospitals.length > 0) {[m
+[32m+[m[32m        const bounds = L.latLngBounds([[m
+[32m+[m[32m          [userLocation.latitude, userLocation.longitude][m
+[32m+[m[32m        ]);[m
+[32m+[m[32m        hospitals.forEach(hospital => {[m
+[32m+[m[32m          bounds.extend([hospital.latitude, hospital.longitude]);[m
+[32m+[m[32m        });[m
+[32m+[m[32m        map.fitBounds(bounds, { padding: [50, 50] });[m
+[32m+[m[32m      }[m
+[32m+[m[32m    }).catch(err => {[m
+[32m+[m[32m      console.error('Error loading Leaflet:', err);[m
+[32m+[m[32m      setError('Failed to load map library');[m
+     });[m
+[32m+[m[32m  }, [userLocation.latitude, userLocation.longitude, hospitals]);[m
+ [m
+[31m-    setMarkers(newMarkers);[m
+[31m-[m
+[31m-    // Adjust map bounds to show all markers and user location[m
+[31m-    if (newMarkers.length > 0) {[m
+[31m-      const bounds = new window.google.maps.LatLngBounds();[m
+[31m-      bounds.extend({[m
+[31m-        lat: userLocation.latitude,[m
+[31m-        lng: userLocation.longitude,[m
+[31m-      });[m
+[32m+[m[32m  // Get user location on initial load[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    // eslint-disable-next-line react-hooks/set-state-in-effect[m
+[32m+[m[32m    getUserLocation();[m
+[32m+[m[32m  }, [getUserLocation]);[m
+ [m
+[31m-      newMarkers.forEach((marker) =>[m
+[31m-        bounds.extend(marker.getPosition())[m
+[31m-      );[m
+[31m-      map.fitBounds(bounds, 100); // 100px padding[m
+[32m+[m[32m  // Fetch hospitals when location or radius changes[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    if (userLocation.latitude !== undefined && userLocation.longitude !== undefined) {[m
+[32m+[m[32m      // eslint-disable-next-line react-hooks/set-state-in-effect[m
+[32m+[m[32m      fetchNearbyHospitals();[m
+     }[m
+[31m-  };[m
+[32m+[m[32m  }, [userLocation.latitude, userLocation.longitude, radius, fetchNearbyHospitals]);[m
+ [m
+[31m-  // Handle radius change[m
+[31m-  const handleRadiusChange = (e) => {[m
+[31m-    setRadius(parseInt(e.target.value));[m
+[31m-    if (userLocation) {[m
+[31m-      fetchNearbyHospitals();[m
+[32m+[m[32m  // Initialize map when hospitals data changes[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    if (userLocation.latitude !== undefined && userLocation.longitude !== undefined) {[m
+[32m+[m[32m      initializeMap();[m
+     }[m
+[31m-  };[m
+[32m+[m[32m  }, [userLocation.latitude, userLocation.longitude, hospitals, initializeMap]);[m
+ [m
+[31m-  // Handle manual location search (fallback if geolocation fails)[m
+[31m-  const handleSearch = async (e) => {[m
+[32m+[m[32m  // Clean up Leaflet map on unmount[m
+[32m+[m[32m  useEffect(() => {[m
+[32m+[m[32m    return () => {[m
+[32m+[m[32m      if (leafletMapRef.current && leafletMapRef.current._leafletMap) {[m
+[32m+[m[32m        leafletMapRef.current._leafletMap.remove();[m
+[32m+[m[32m        leafletMapRef.current = null;[m
+[32m+[m[32m      }[m
+[32m+[m[32m    };[m
+[32m+[m[32m  }, []);[m
+[32m+[m
+[32m+[m[32m  // Handle manual location input[m
+[32m+[m[32m  const handleLocationSubmit = (e) => {[m
+     e.preventDefault();[m
+[31m-    const latInput = document.getElementById("manual-lat").value;[m
+[31m-    const lngInput = document.getElementById("manual-lng").value;[m
+[32m+[m[32m    const latInput = e.target.elements.latitude.value;[m
+[32m+[m[32m    const lngInput = e.target.elements.longitude.value;[m
+ [m
+     const lat = parseFloat(latInput);[m
+     const lng = parseFloat(lngInput);[m
+ [m
+[31m-    if (isNaN(lat) || lat < -90 || lat > 90) {[m
+[31m-      setError("Please enter a valid latitude between -90 and 90");[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    if (isNaN(lng) || lng < -180 || lng > 180) {[m
+[31m-      setError("Please enter a valid longitude between -180 and 180");[m
+[31m-      return;[m
+[31m-    }[m
+[31m-[m
+[31m-    setUserLocation({ latitude: lat, longitude: lng });[m
+[31m-    if (window.google) {[m
+[31m-      initializeMap();[m
+[32m+[m[32m    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {[m
+[32m+[m[32m      setUserLocation({ latitude: lat, longitude: lng });[m
+[32m+[m[32m      setError(null);[m
+[32m+[m[32m    } else {[m
+[32m+[m[32m      setError('Please enter valid latitude (-90 to 90) and longitude (-180 to 180)');[m
+     }[m
+   };[m
+ [m
+[32m+[m[32m  if (loading && hospitals.length === 0) {[m
+[32m+[m[32m    return ([m
+[32m+[m[32m      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center py-12">[m
+[32m+[m[32m        <div className="text-center">[m
+[32m+[m[32m          <div className="mx-auto h-12 w-12 rounded-full bg-blue-100 flex items-center justify-center mb-4">[m
+[32m+[m[32m            <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[32m+[m[32m              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2h-13M9 14l1.293-1.293M12 14l1.293-1.293M15 14l1.293-1.293M10 17l1.293-1.293M13 17l1.293-1.293M16 17l1.293-1.293"/>[m
+[32m+[m[32m            </svg>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <h2 className="text-xl font-bold text-gray-900 mb-2">Finding your location...</h2>[m
+[32m+[m[32m          <p className="text-gray-500">Please allow location access to find nearby hospitals</p>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      </div>[m
+[32m+[m[32m    );[m
+[32m+[m[32m  }[m
+[32m+[m
+   return ([m
+     <div className="min-h-screen bg-gray-50">[m
+[31m-      {/* Hospital Navbar */}[m
+[31m-      <nav className="bg-white border-b border-gray-200">[m
+[31m-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">[m
+[31m-          <div>[m
+[31m-            <button[m
+[31m-              onClick={() => router.push("/hospital/dashboard")}[m
+[31m-              className="text-2xl font-bold text-blue-600"[m
+[31m-            >[m
+[31m-              LifeLink[m
+[31m-            </button>[m
+[31m-            <p className="text-xs text-gray-500">[m
+[31m-              Emergency Organ Donor Network[m
+[31m-            </p>[m
+[31m-          </div>[m
+[31m-          <div className="flex items-center gap-4">[m
+[31m-            <button[m
+[31m-              onClick={() => router.push("/hospital/dashboard")}[m
+[31m-              className="text-sm text-gray-600 hover:text-blue-600"[m
+[31m-            >[m
+[31m-              Dashboard[m
+[31m-            </button>[m
+[31m-            <button[m
+[31m-              onClick={() => router.push("/hospital/organs")}[m
+[31m-              className="text-sm text-gray-600 hover:text-blue-600"[m
+[31m-            >[m
+[31m-              Organs[m
+[31m-            </button>[m
+[31m-            <button[m
+[31m-              onClick={() => router.push("/hospital/requests/new")}[m
+[31m-              className="text-sm text-gray-600 hover:text-blue-600"[m
+[31m-            >[m
+[31m-              New Request[m
+[31m-            </button>[m
+[31m-            <button[m
+[31m-              onClick={() => {[m
+[31m-                localStorage.removeItem("lifelink_token");[m
+[31m-                localStorage.removeItem("lifelink_user");[m
+[31m-                router.replace("/hospital/login");[m
+[31m-              }}[m
+[31m-              className="px-4 py-2 rounded-lg bg-red-500 text-white text-sm font-medium hover:bg-red-600"[m
+[31m-            >[m
+[31m-              Logout[m
+[31m-            </button>[m
+[32m+[m[32m      {/* Navbar */}[m
+[32m+[m[32m      <nav className="bg-white shadow-sm">[m
+[32m+[m[32m        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">[m
+[32m+[m[32m          <div className="flex justify-between h-16">[m
+[32m+[m[32m            <div className="flex items-center">[m
+[32m+[m[32m              <div className="flex-shrink-0">[m
+[32m+[m[32m                <Image src="/logo.png" alt="lifeLink" width={40} height={40} className="h-8 w-auto" />[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m              <div className="hidden md:block">[m
+[32m+[m[32m                <div className="ml-10 flex items-baseline space-x-4">[m
+[32m+[m[32m                  <Link href="/" className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">Home</Link>[m
+[32m+[m[32m                  <a href="/login" className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">Login</a>[m
+[32m+[m[32m                  <a href="/register" className="text-gray-500 hover:text-gray-700 px-3 py-2 rounded-md text-sm font-medium">Register</a>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              </div>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m            <div className="flex items-center">[m
+[32m+[m[32m              <a href="/login" className="text-sm font-medium text-indigo-600 hover:text-indigo-500">[m
+[32m+[m[32m                Login[m
+[32m+[m[32m              </a>[m
+[32m+[m[32m            </div>[m
+           </div>[m
+         </div>[m
+       </nav>[m
+ [m
+[31m-      {/* Page Content */}[m
+[31m-      <div className="max-w-7xl mx-auto px-6 py-8">[m
+[31m-        {/* Header */}[m
+[31m-        <div className="mb-8">[m
+[31m-          <h2 className="text-3xl font-bold text-gray-900">[m
+[31m-            Find Nearby Hospitals[m
+[31m-          </h2>[m
+[31m-          <p className="mt-2 text-gray-600">[m
+[31m-            Locate verified hospitals near your current location[m
+[31m-          </p>[m
+[31m-        </div>[m
+[32m+[m[32m      {/* Main Content */}[m
+[32m+[m[32m      <div className="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8">[m
+[32m+[m[32m        <h1 className="text-3xl font-bold text-gray-900 mb-6">Nearby Hospitals</h1>[m
+ [m
+[31m-        {/* Error Message */}[m
+         {error && ([m
+[31m-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">[m
+[31m-            {error}[m
+[32m+[m[32m          <div className="bg-red-50 border-l-4 border-red-500 text-red-700 p-4 mb-6">[m
+[32m+[m[32m            <p>{error}</p>[m
+           </div>[m
+         )}[m
+ [m
+[31m-        {/* Loading State */}[m
+[31m-        {loading && !userLocation && ([m
+[31m-          <div className="text-center py-12">[m
+[31m-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>[m
+[31m-            <p className="text-lg">Getting your location...</p>[m
+[31m-          </div>[m
+[31m-        )}[m
+[32m+[m[32m        {/* Location Controls */}[m
+[32m+[m[32m        <div className="bg-white rounded-lg border border-gray-200 shadow-sm mb-6">[m
+[32m+[m[32m          <div className="px-6 py-4">[m
+[32m+[m[32m            <div className="mb-4">[m
+[32m+[m[32m              <h3 className="font-semibold text-gray-900 mb-2">Your Location</h3>[m
+[32m+[m[32m              {userLocation.latitude !== undefined && userLocation.longitude !== undefined ? ([m
+[32m+[m[32m                <p className="text-sm text-gray-600">[m
+[32m+[m[32m                  Latitude: {userLocation.latitude.toFixed(4)}, Longitude: {userLocation.longitude.toFixed(4)}[m
+[32m+[m[32m                </p>[m
+[32m+[m[32m              ) : ([m
+[32m+[m[32m                <p className="text-sm text-gray-500">Fetching your location...</p>[m
+[32m+[m[32m              )}[m
+[32m+[m[32m            </div>[m
+ [m
+[31m-        {/* Location Input Fallback */}[m
+[31m-        {!userLocation && !loading && ([m
+[31m-          <div className="mb-6 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">[m
+[31m-            <h3 className="font-semibold text-yellow-800 mb-2">[m
+[31m-              Unable to detect location automatically[m
+[31m-            </h3>[m
+[31m-            <p className="mb-4">[m
+[31m-              Please enter your coordinates manually or enable location services in your browser settings.[m
+[31m-            </p>[m
+[31m-            <form onSubmit={handleSearch} className="space-y-4">[m
+[31m-              <div className="grid grid-cols-2 gap-4">[m
+[32m+[m[32m            {/* Manual Location Input */}[m
+[32m+[m[32m            <form onSubmit={handleLocationSubmit} className="space-y-4">[m
+[32m+[m[32m              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">[m
+                 <div>[m
+[31m-                  <label className="block text-sm font-medium text-gray-700 mb-2">[m
+[31m-                    Latitude[m
+[31m-                  </label>[m
+[32m+[m[32m                  <label className="block text-sm font-medium text-gray-700 mb-1">Latitude</label>[m
+                   <input[m
+                     type="number"[m
+[31m-                    id="manual-lat"[m
+[31m-                    placeholder="e.g., 12.9716"[m
+[31m-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500"[m
+[32m+[m[32m                    name="latitude"[m
+[32m+[m[32m                    step="0.0001"[m
+[32m+[m[32m                    placeholder="Enter latitude"[m
+[32m+[m[32m                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"[m
+                   />[m
+                 </div>[m
+                 <div>[m
+[31m-                  <label className="block text-sm font-medium text-gray-700 mb-2">[m
+[31m-                    Longitude[m
+[31m-                  </label>[m
+[32m+[m[32m                  <label className="block text-sm font-medium text-gray-700 mb-1">Longitude</label>[m
+                   <input[m
+                     type="number"[m
+[31m-                    id="manual-lng"[m
+[31m-                    placeholder="e.g., 77.5946"[m
+[31m-                    className="w-full px-4 py-2.5 rounded-lg border border-gray-300 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500"[m
+[32m+[m[32m                    name="longitude"[m
+[32m+[m[32m                    step="0.0001"[m
+[32m+[m[32m                    placeholder="Enter longitude"[m
+[32m+[m[32m                    className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"[m
+                   />[m
+                 </div>[m
+               </div>[m
+[31m-              <button[m
+[31m-                type="submit"[m
+[31m-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2.5 px-4 rounded-lg"[m
+[31m-              >[m
+[31m-                Search Location[m
+[32m+[m[32m              <button type="submit" className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg">[m
+[32m+[m[32m                Use This Location[m
+               </button>[m
+             </form>[m
+           </div>[m
+[31m-        )}[m
+[32m+[m[32m        </div>[m
+ [m
+[31m-        {/* Main Content - Map and Hospital List */}[m
+[31m-        {userLocation && !loading && ([m
+[31m-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">[m
+[32m+[m[32m        {/* Map and Controls */}[m
+[32m+[m[32m        <div className="bg-white rounded-lg border border-gray-200 shadow-sm">[m
+[32m+[m[32m          <div className="flex flex-col md:flex-row">[m
+             {/* Map */}[m
+[31m-            <div className="lg:col-span-2">[m
+[31m-              <div className="aspect-w-16 aspect-h-9 bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden">[m
+[31m-                <div ref={mapRef} id="map-container" className="h-full w-full" />[m
+[31m-              </div>[m
+[32m+[m[32m            <div className="flex-1 min-h-0">[m
+[32m+[m[32m              <div[m
+[32m+[m[32m                ref={leafletMapRef}[m
+[32m+[m[32m                className="h-[600px] w-full"[m
+[32m+[m[32m              />[m
+             </div>[m
+ [m
+[31m-            {/* Hospital List and Controls */}[m
+[31m-            <div className="lg:col-span-1 space-y-6">[m
+[31m-              {/* Controls Panel */}[m
+[31m-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">[m
+[31m-                <h3 className="font-semibold text-gray-900 mb-4">Search Controls</h3>[m
+[31m-[m
+[31m-                {/* Radius Selector */}[m
+[31m-                <div className="mb-5">[m
+[31m-                  <label className="block text-sm font-medium text-gray-700 mb-2">[m
+[31m-                    Search Radius[m
+[31m-                  </label>[m
+[31m-                  <div className="flex space-x-3">[m
+[31m-                    {[5, 10, 25, 50].map((r) => ([m
+[31m-                      <label[m
+[31m-                        key={r}[m
+[31m-                        className={`flex items-center px-3 py-2 rounded-lg border border-gray-300 text-sm font-medium ${[m
+[31m-                          radius === r[m
+[31m-                            ? "bg-blue-600 text-white"[m
+[31m-                            : "bg-gray-50 text-gray-700 hover:bg-gray-100"[m
+[31m-                        }`}[m
+[31m-                      >[m
+[31m-                        <input[m
+[31m-                          type="radio"[m
+[31m-                          value={r}[m
+[31m-                          checked={radius === r}[m
+[31m-                          onChange={handleRadiusChange}[m
+[31m-                          className="hidden"[m
+[31m-                        />[m
+[31m-                        <span>{r} km</span>[m
+[31m-                      </label>[m
+[31m-                    ))}[m
+[31m-                  </div>[m
+[31m-                  <p className="mt-2 text-xs text-gray-500">[m
+[31m-                    Hospitals within {radius} km of your location[m
+[31m-                  </p>[m
+[32m+[m[32m            {/* Controls and Hospital List */}[m
+[32m+[m[32m            <div className="w-full md:w-64 pl-4 pt-4 md:pt-0 space-y-4">[m
+[32m+[m[32m              {/* Radius Controls */}[m
+[32m+[m[32m              <div className="space-y-3">[m
+[32m+[m[32m                <div className="flex items-center justify-between">[m
+[32m+[m[32m                  <span className="font-medium text-gray-900">Search Radius</span>[m
+[32m+[m[32m                  <span className="text-sm text-gray-500">{radius} km</span>[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m                <input[m
+[32m+[m[32m                  type="range"[m
+[32m+[m[32m                  min="5"[m
+[32m+[m[32m                  max="50"[m
+[32m+[m[32m                  step="5"[m
+[32m+[m[32m                  value={radius}[m
+[32m+[m[32m                  onChange={(e) => setRadius(parseInt(e.target.value))}[m
+[32m+[m[32m                  className="w-full"[m
+[32m+[m[32m                />[m
+[32m+[m[32m                <div className="flex justify-between text-xs text-gray-500">[m
+[32m+[m[32m                  <span>5 km</span>[m
+[32m+[m[32m                  <span>50 km</span>[m
+                 </div>[m
+[31m-[m
+[31m-                {/* Refresh Button */}[m
+[31m-                <button[m
+[31m-                  onClick={fetchNearbyHospitals}[m
+[31m-                  className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2"[m
+[31m-                >[m
+[31m-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[31m-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2h-13"/>[m
+[31m-                  </svg>[m
+[31m-                  Refresh Search[m
+[31m-                </button>[m
+               </div>[m
+ [m
+[31m-              {/* Hospitals List */}[m
+[31m-              <div className="bg-white rounded-lg border border-gray-200 shadow-sm">[m
+[31m-                <h3 className="font-semibold text-gray-900 mb-4">[m
+[31m-                  Nearby Hospitals ({hospitals.length} found)[m
+[31m-                </h3>[m
+[32m+[m[32m              {/* Refresh Button */}[m
+[32m+[m[32m              <button[m
+[32m+[m[32m                onClick={fetchNearbyHospitals}[m
+[32m+[m[32m                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2"[m
+[32m+[m[32m              >[m
+[32m+[m[32m                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[32m+[m[32m                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2h-13"/>[m
+[32m+[m[32m                </svg>[m
+[32m+[m[32m                Refresh Search[m
+[32m+[m[32m              </button>[m
+[32m+[m[32m            </div>[m
+ [m
+[31m-                {hospitals.length === 0 ? ([m
+[31m-                  <div className="text-center py-8 text-gray-500">[m
+[31m-                    <p>No verified hospitals found within {radius} km of your location.</p>[m
+[31m-                    {(userLocation.latitude !== undefined && userLocation.longitude !== undefined) && ([m
+[31m-                      <>[m
+[31m-                        <p className="mt-2">[m
+[31m-                          Try increasing the search radius or check your location coordinates.[m
+[31m-                        </p>[m
+[31m-                        <p className="mt-1 text-xs">[m
+[31m-                          Current location: {userLocation.latitude.toFixed(4)}, {userLocation.longitude.toFixed(4)}[m
+[31m-                        </p>[m
+[31m-                      </>[m
+[31m-                    )}[m
+[31m-                  </div>[m
+[31m-                ) : ([m
+[31m-                  <div className="space-y-3">[m
+[31m-                    {hospitals.map((hospital) => ([m
+[31m-                      <div[m
+[31m-                        key={hospital.id}[m
+[31m-                        className={`border-b border-gray-100 hover:bg-gray-50 p-4 ${[m
+[31m-                          selectedHospital && selectedHospital.id === hospital.id[m
+[31m-                            ? "border-l-4 border-blue-500 bg-blue-50"[m
+[31m-                            : ""[m
+[31m-                        }`}[m
+[31m-                      >[m
+[31m-                        <div className="flex justify-between items-start">[m
+[31m-                          <div className="flex-1">[m
+[31m-                            <h4 className="font-semibold text-gray-900">{hospital.hospitalName}</h4>[m
+[31m-                            <p className="text-sm text-gray-600 mt-1 truncate">[m
+[31m-                              {hospital.address}, {hospital.city}, {hospital.state}[m
+[31m-                            </p>[m
+[31m-                            <div className="flex items-center gap-3 mt-2 text-sm">[m
+[31m-                              <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">[m
+[31m-                                {hospital.distance} km away[m
+[32m+[m[32m            {/* Hospitals List */}[m
+[32m+[m[32m            <div className="bg-white rounded-lg border border-gray-200 shadow-sm">[m
+[32m+[m[32m              <h3 className="font-semibold text-gray-900 mb-4">[m
+[32m+[m[32m                Nearby Hospitals ({hospitals.length} found)[m
+[32m+[m[32m              </h3>[m
+[32m+[m
+[32m+[m[32m              {hospitals.length === 0 ? ([m
+[32m+[m[32m                <div className="text-center py-8 text-gray-500">[m
+[32m+[m[32m                  <p>No verified hospitals found within {radius} km of your location.</p>[m
+[32m+[m[32m                  {(userLocation.latitude !== undefined && userLocation.longitude !== undefined) && ([m
+[32m+[m[32m                    <>[m
+[32m+[m[32m                      <p className="mt-2">[m
+[32m+[m[32m                        Try increasing the search radius or check your location coordinates.[m
+[32m+[m[32m                      </p>[m
+[32m+[m[32m                      <p className="mt-1 text-xs">[m
+[32m+[m[32m                        Current location: {userLocation.latitude.toFixed(4)}, {userLocation.longitude.toFixed(4)}[m
+[32m+[m[32m                      </p>[m
+[32m+[m[32m                    </>[m
+[32m+[m[32m                  )}[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              ) : ([m
+[32m+[m[32m                <div className="space-y-3">[m
+[32m+[m[32m                  {hospitals.map((hospital) => ([m
+[32m+[m[32m                    <div[m
+[32m+[m[32m                      key={hospital.id}[m
+[32m+[m[32m                      className={`border-b border-gray-100 hover:bg-gray-50 p-4 ${[m
+[32m+[m[32m                        selectedHospital && selectedHospital.id === hospital.id[m
+[32m+[m[32m                          ? "border-l-4 border-blue-500 bg-blue-50"[m
+[32m+[m[32m                          : ""[m
+[32m+[m[32m                      }`}[m
+[32m+[m[32m                    >[m
+[32m+[m[32m                      <div className="flex justify-between items-start">[m
+[32m+[m[32m                        <div className="flex-1">[m
+[32m+[m[32m                          <h4 className="font-semibold text-gray-900">{hospital.hospitalName}</h4>[m
+[32m+[m[32m                          <p className="text-sm text-gray-600 mt-1 truncate">[m
+[32m+[m[32m                            {hospital.address}, {hospital.city}, {hospital.state}[m
+[32m+[m[32m                          </p>[m
+[32m+[m[32m                          <div className="flex items-center gap-3 mt-2 text-sm">[m
+[32m+[m[32m                            <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded-full">[m
+[32m+[m[32m                              {hospital.distance} km away[m
+[32m+[m[32m                            </span>[m
+[32m+[m[32m                            {hospital.phone ? ([m
+[32m+[m[32m                              <span className="ml-2">[m
+[32m+[m[32m                                <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[32m+[m[32m                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.113a11.042 11.042 0 01-5.516 5.516l-1.113-2.257a1 1 0 01-1.21-.502l-4.493 1.498a1 1 0 01-.684.948A5.956 5.956 0 003 11.72V15a2 2 0 002 2h1a2 2 0 012 2v1"/>[m
+[32m+[m[32m                                </svg>[m
+                               </span>[m
+[31m-                              {hospital.phone ? ([m
+[31m-                                <span className="ml-2">[m
+[31m-                                  <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[31m-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.113a11.042 11.042 0 01-5.516 5.516l-1.113-2.257a1 1 0 01-1.21-.502l-4.493 1.498a1 1 0 01-.684.948A5.956 5.956 0 003 11.72V15a2 2 0 002 2h1a2 2 0 012 2v1"/>[m
+[31m-                                  </svg>[m
+[31m-                                </span>[m
+[31m-                              ) : ""}[m
+[31m-                            </div>[m
+[32m+[m[32m                            ) : ""}[m
+                           </div>[m
+[31m-                          <div className="text-right space-y-1">[m
+[32m+[m[32m                        </div>[m
+[32m+[m[32m                        <div className="text-right space-y-1">[m
+[32m+[m[32m                          <button[m
+[32m+[m[32m                            onClick={() => setSelectedHospital(hospital)}[m
+[32m+[m[32m                            className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"[m
+[32m+[m[32m                          >[m
+[32m+[m[32m                            View Details[m
+[32m+[m[32m                          </button>[m
+[32m+[m[32m                          {selectedHospital && selectedHospital.id === hospital.id && ([m
+                             <button[m
+[31m-                              onClick={() => setSelectedHospital(hospital)}[m
+[31m-                              className="text-sm font-medium text-blue-600 hover:text-blue-700 hover:underline"[m
+[32m+[m[32m                              onClick={() => {[m
+[32m+[m[32m                                // Center map on this hospital[m
+[32m+[m[32m                                if (leafletMapRef.current && leafletMapRef.current._leafletMap) {[m
+[32m+[m[32m                                  leafletMapRef.current._leafletMap.setView([m
+[32m+[m[32m                                    [hospital.latitude, hospital.longitude],[m
+[32m+[m[32m                                    15[m
+[32m+[m[32m                                  );[m
+[32m+[m[32m                                  // Open popup for this hospital[m
+[32m+[m[32m                                  const markers = markersRef.current.getLayers();[m
+[32m+[m[32m                                  const hospitalMarker = markers.find([m
+[32m+[m[32m                                    (m) =>[m
+[32m+[m[32m                                      m.getLatLng().lat === hospital.latitude &&[m
+[32m+[m[32m                                      m.getLatLng().lng === hospital.longitude[m
+[32m+[m[32m                                  );[m
+[32m+[m[32m                                  if (hospitalMarker) {[m
+[32m+[m[32m                                    hospitalMarker.openPopup();[m
+[32m+[m[32m                                  }[m
+[32m+[m[32m                                }[m
+[32m+[m[32m                              }}[m
+[32m+[m[32m                              className="mt-1 text-xs text-green-600 hover:text-green-700 hover:underline"[m
+                             >[m
+[31m-                              View Details[m
+[32m+[m[32m                              Show on Map[m
+                             </button>[m
+[31m-                            {selectedHospital && selectedHospital.id === hospital.id && ([m
+[31m-                              <button[m
+[31m-                                onClick={() => {[m
+[31m-                                  // Center map on this hospital[m
+[31m-                                  if (map && window.google) {[m
+[31m-                                    map.setCenter({[m
+[31m-                                      lat: hospital.latitude,[m
+[31m-                                      lng: hospital.longitude,[m
+[31m-                                    });[m
+[31m-                                    map.setZoom(15);[m
+[31m-                                  }[m
+[31m-                                }}[m
+[31m-                                className="mt-1 text-xs text-green-600 hover:text-green-700 hover:underline"[m
+[31m-                              >[m
+[31m-                                Show on Map[m
+[31m-                              </button>[m
+[31m-                            )}[m
+[31m-                          </div>[m
+[32m+[m[32m                          )}[m
+                         </div>[m
+                       </div>[m
+[31m-                    ))}[m
+[31m-                  </div>[m
+[31m-                )}[m
+[31m-              </div>[m
+[32m+[m[32m                    </div>[m
+[32m+[m[32m                  ))}[m
+[32m+[m[32m                </div>[m
+[32m+[m[32m              )}[m
+             </div>[m
+           </div>[m
+[31m-        )}[m
+[32m+[m[32m        </div>[m
+       </div>[m
+ [m
+       {/* Selected Hospital Details Modal/Panel */}[m
+[36m@@ -502,7 +446,7 @@[m [mexport default function NearbyHospitalsPage() {[m
+               </div>[m
+               <button[m
+                 onClick={() => setSelectedHospital(null)}[m
+[31m-                className="text-gray-400 hover:text-gray-600 hover:text-gray-600"[m
+[32m+[m[32m                className="text-gray-400 hover:text-gray-600"[m
+               >[m
+                 <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12"/>[m
+[36m@@ -547,13 +491,13 @@[m [mexport default function NearbyHospitalsPage() {[m
+                 <div className="space-y-3">[m
+                   <div className="flex items-center gap-3">[m
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[31m-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>[m
+[32m+[m[32m                      <path strokeLinecap="round" strokeLinejoin="round" strokeWeight="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 002-2v10a2 2 0 002 2z"/>[m
+                     </svg>[m
+                     <span>Request an organ from this hospital</span>[m
+                   </div>[m
+                   <div className="flex items-center gap-3">[m
+                     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">[m
+[31m-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 00-5.618 4.016"/>[m
+[32m+[m[32m                      <path strokeLinecap="round" strokeLinejoin="round" strokeWeight="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 00-5.618 4.016"/>[m
+                     </svg>[m
+                     <span>Offer an organ to this hospital</span>[m
+                   </div>[m
+[36m@@ -566,12 +510,11 @@[m [mexport default function NearbyHospitalsPage() {[m
+                 onClick={() => {[m
+                   setSelectedHospital(null);[m
+                   // Center map on user location[m
+[31m-                  if (map && window.google && userLocation) {[m
+[31m-                    map.setCenter({[m
+[31m-                      lat: userLocation.latitude,[m
+[31m-                      lng: userLocation.longitude,[m
+[31m-                    });[m
+[31m-                    map.setZoom(13);[m
+[32m+[m[32m                  if (leafletMapRef.current && leafletMapRef.current._leafletMap && userLocation) {[m
+[32m+[m[32m                    leafletMapRef.current._leafletMap.setView([m
+[32m+[m[32m                      [userLocation.latitude, userLocation.longitude],[m
+[32m+[m[32m                      13[m
+[32m+[m[32m                    );[m
+                   }[m
+                 }}[m
+                 className="w-full bg-gray-800 text-white py-2 px-4 rounded-lg hover:bg-gray-700"[m
+[36m@@ -580,13 +523,10 @@[m [mexport default function NearbyHospitalsPage() {[m
+               </button>[m
+             </div>[m
+           </div>[m
+[31m-        )}[m
+[31m-      </div>[m
+[31m-[m
+[31m-      {/* Google Maps Script Loader */}[m
+[31m-      <Script[m
+[31m-        strategy="lazyOnload"[m
+[31m-        src={`https://maps.googleapis.com/maps/api/js?key=${process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY}&libraries=places`}[m
+[31m-      />[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m      )}[m
+[32m+[m[32m    </div>[m
+   );[m
+[31m-}[m
+\ No newline at end of file[m
+[32m+[m[32m};[m
+[32m+[m
+[32m+[m[32mexport default NearbyHospitalsPage;[m
+\ No newline at end of file[m
+[1mdiff --git a/frontend/package-lock.json b/frontend/package-lock.json[m
+[1mindex 8a9a798..14d71fd 100644[m
+[1m--- a/frontend/package-lock.json[m
+[1m+++ b/frontend/package-lock.json[m
+[36m@@ -9,6 +9,7 @@[m
+       "version": "0.1.0",[m
+       "dependencies": {[m
+         "axios": "^1.19.0",[m
+[32m+[m[32m        "leaflet": "^1.9.4",[m
+         "next": "16.3.2",[m
+         "react": "19.2.8",[m
+         "react-dom": "19.2.8"[m
+[36m@@ -4880,6 +4881,12 @@[m
+         "node": ">=0.10"[m
+       }[m
+     },[m
+[32m+[m[32m    "node_modules/leaflet": {[m
+[32m+[m[32m      "version": "1.9.4",[m
+[32m+[m[32m      "resolved": "https://registry.npmjs.org/leaflet/-/leaflet-1.9.4.tgz",[m
+[32m+[m[32m      "integrity": "sha512-nxS1ynzJOmOlHp+iL3FyWqK89GtNL8U8rvlMOsQdTTssxZwCXh8N2NB3GDQOL+YR3XnWyZAxwQixURb+FA74PA==",[m
+[32m+[m[32m      "license": "BSD-2-Clause"[m
+[32m+[m[32m    },[m
+     "node_modules/levn": {[m
+       "version": "0.4.1",[m
+       "resolved": "https://registry.npmjs.org/levn/-/levn-0.4.1.tgz",[m
+[1mdiff --git a/frontend/package.json b/frontend/package.json[m
+[1mindex 8e2fa1e..93e6625 100644[m
+[1m--- a/frontend/package.json[m
+[1m+++ b/frontend/package.json[m
+[36m@@ -10,6 +10,7 @@[m
+   },[m
+   "dependencies": {[m
+     "axios": "^1.19.0",[m
+[32m+[m[32m    "leaflet": "^1.9.4",[m
+     "next": "16.3.2",[m
+     "react": "19.2.8",[m
+     "react-dom": "19.2.8"[m

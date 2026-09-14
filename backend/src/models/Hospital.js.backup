@@ -73,27 +73,6 @@ const hospitalSchema = new mongoose.Schema(
       default: "hospital",
       enum: ["hospital"],
     },
-    
-    // Notification preferences
-    notificationPreferences: {
-      email: {
-        type: Boolean,
-        default: true
-      },
-      whatsapp: {
-        type: Boolean,
-        default: true
-      },
-      sms: {
-        type: Boolean,
-        default: true
-      },
-      inApp: {
-        type: Boolean,
-        default: true
-      }
-    },
-
     resetPasswordToken: {
       type: String,
       default: null,

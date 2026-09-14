@@ -15,42 +15,42 @@ export default function HospitalDashboard() {
   const [stats, setStats] = useState(null);
   const [recentRequests, setRecentRequests] = useState([]);
 
-  useEffect(() => {
-    const loadDashboard = async () => {
-      try {
-        setError("");
+  const loadDashboard = async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const token = localStorage.getItem("lifelink_token");
 
-        const token = localStorage.getItem("lifelink_token");
-
-        if (!token) {
-          router.replace("/hospital/login");
-          return;
-        }
-
-        const response = await api.get("/hospitals/dashboard");
-        setUser({ name: response.data.hospital?.hospitalName });
-        setStats(response.data.stats || {});
-        setRecentRequests(response.data.recentRequests || []);
-      } catch (err) {
-        console.error("Dashboard error:", err);
-        if (err.response?.status === 401) {
-          localStorage.removeItem("lifelink_token");
-          localStorage.removeItem("lifelink_user");
-          router.replace("/hospital/login");
-          return;
-        }
-        setError(
-          err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
-            ? "The dashboard request timed out. Please try again."
-            : err.response?.data?.message || "Unable to load dashboard.",
-        );
-      } finally {
-        setLoading(false);
+      if (!token) {
+        router.replace("/hospital/login");
+        return;
       }
-    };
 
+      const response = await api.get("/hospitals/dashboard");
+      setUser({ name: response.data.hospital?.hospitalName });
+      setStats(response.data.stats || {});
+      setRecentRequests(response.data.recentRequests || []);
+    } catch (err) {
+      console.error("Dashboard error:", err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem("lifelink_token");
+        localStorage.removeItem("lifelink_user");
+        router.replace("/hospital/login");
+        return;
+      }
+      setError(
+        err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
+          ? "The dashboard request timed out. Please try again."
+          : err.response?.data?.message || "Unable to load dashboard.",
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
     loadDashboard();
-  }, [router]);
+  }, []); // Run only on mount to prevent duplicate requests
 
   if (loading) {
     return (
@@ -73,7 +73,7 @@ export default function HospitalDashboard() {
           <p className="mt-3 text-slate-600">{error}</p>
 
           <button
-            onClick={() => window.location.reload()}
+            onClick={loadDashboard}
             className="mt-6 bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold"
           >
             Retry

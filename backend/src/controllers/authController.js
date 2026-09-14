@@ -1,4 +1,5 @@
 const Hospital = require("../models/Hospital");
+console.log('Hospital model in controller:', Hospital);
 const Admin = require("../models/Admin");
 const crypto = require("crypto");
 
@@ -309,10 +310,8 @@ const requestPasswordReset = async (req, res) => {
 
     if (user) {
       const token = crypto.randomBytes(32).toString("hex");
-      user.resetPasswordToken = crypto
-        .createHash("sha256")
-        .update(token)
-        .digest("hex");
+      const hash = crypto.createHash("sha256").update(token).digest("hex");
+      user.resetPasswordToken = hash;
       user.resetPasswordExpires = Date.now() + 15 * 60 * 1000;
       await user.save();
 

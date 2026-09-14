@@ -21,6 +21,7 @@ const notificationSchema = new mongoose.Schema(
         "RequestRejected",
         "RequestUpdated",
         "HospitalVerified",
+    "HospitalRegistration",
         "General",
       ],
     },

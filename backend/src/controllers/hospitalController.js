@@ -3,6 +3,7 @@ const Organ = require("../models/Organ");
 const OrganRequest = require("../models/OrganRequest");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
+const notificationService = require("../services/notificationService");
 // ==========================================
 // GET ALL HOSPITALS
 // ==========================================
@@ -340,15 +341,21 @@ const verifyHospital = async (req, res) => {
     await hospital.save();
 
     if (status === "Verified") {
-      await Notification.create({
-        recipientHospital: hospital._id,
-        recipientAdmin: req.user.id,
-        type: "HospitalVerified",
-        title: "Hospital verification complete",
-        message: "Your hospital is now verified and can participate in organ exchange.",
+      await notificationService.sendHospitalNotification({
+        hospitalId: hospital._id,
+        event: "HospitalVerified",
+        data: {
+          title: "Hospital verification complete",
+          message: "Your hospital is now verified and can participate in organ exchange."
+        }
       });
-    }
-
+      
+      await notificationService.sendAdminNotification({
+        adminId: req.user.id,
+        event: "HospitalVerified",
+        data: {
+          title: "Hospital verification complete",
+          message: "Hospital verification completed successfully."
     return res.status(200).json({
       success: true,
       message: `Hospital ${status.toLowerCase()} successfully`,
