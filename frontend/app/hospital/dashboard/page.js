@@ -49,8 +49,46 @@ export default function HospitalDashboard() {
   };
 
   useEffect(() => {
-    loadDashboard();
-  }, []); // Run only on mount to prevent duplicate requests
+    let isMounted = true;
+    async function fetchData() {
+      setLoading(true);
+      setError("");
+      try {
+        const token = localStorage.getItem("lifelink_token");
+        if (!token) {
+          router.replace("/hospital/login");
+          return;
+        }
+        const response = await api.get("/hospitals/dashboard");
+        if (!isMounted) return;
+        setUser({ name: response.data.hospital?.hospitalName });
+        setStats(response.data.stats || {});
+        setRecentRequests(response.data.recentRequests || []);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("Dashboard error:", err);
+        if (err.response?.status === 401) {
+          localStorage.removeItem("lifelink_token");
+          localStorage.removeItem("lifelink_user");
+          router.replace("/hospital/login");
+          return;
+        }
+        setError(
+          err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
+            ? "The dashboard request timed out. Please try again."
+            : err.response?.data?.message || "Unable to load dashboard.",
+        );
+      } finally {
+        if (!isMounted) return;
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+    return () => {
+      isMounted = false;
+    };
+  }, [router]);
 
   if (loading) {
     return (

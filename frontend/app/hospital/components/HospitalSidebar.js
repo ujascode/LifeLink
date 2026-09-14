@@ -16,6 +16,8 @@ export default function HospitalSidebar() {
     { name: "Hospital Profile", href: "/hospital/profile" },
     { name: "My Organs", href: "/hospital/organs" },
     { name: "Add Organ", href: "/hospital/organs/add" },
+    { name: "Find an Organ", href: "/hospital/requests/new" },
+    { name: "Nearby Hospitals", href: "/hospital/nearby" },
     { name: "All Requests", href: "/hospital/requests" },
     { name: "Sent Requests", href: "/hospital/requests/sent" },
     { name: "Received Requests", href: "/hospital/requests/received" },

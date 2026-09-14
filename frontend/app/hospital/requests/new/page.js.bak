@@ -801,6 +801,7 @@ export default function NewOrganRequestPage() {
 
               {/* HOSPITAL RESULTS */}
               <div className="lg:col-span-1 space-y-6">
+                {/* Nearest Hospital Highlight */}
                 {nearestHospital && (
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
                     <div className="flex items-start">
@@ -844,8 +845,10 @@ export default function NewOrganRequestPage() {
                         </div>
                       </div>
                     </div>
+                  </div>
                 )}
 
+                {/* All Hospitals List */}
                 {hospitals.length > 0 && (
                   <>
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">
@@ -896,6 +899,7 @@ export default function NewOrganRequestPage() {
                   </>
                 )}
 
+                {/* No Hospitals Found */}
                 {filteredOrgans.length > 0 && hospitals.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
                     <p>No verified hospitals found within {radius} km of your location.</p>
