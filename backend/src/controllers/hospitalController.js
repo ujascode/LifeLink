@@ -408,8 +408,7 @@ const verifyHospital = async (req, res) => {
           title: "Hospital verification complete",
           message: "Hospital verification completed successfully."
         }
-      }
-      );
+      });
 
     }   // <-- Closing brace for if (status === "Verified") block
 
@@ -545,4 +544,5 @@ module.exports = {
   getNearbyHospitals,
   geocodeLocation,
   geocode,
+// Fix for unexpected end of input
 };
