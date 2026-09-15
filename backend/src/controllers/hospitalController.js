@@ -207,7 +207,7 @@ const geocodeLocation = async (city, state) => {
     });
   });
 };
-};
+const getHospitalById = async (req, res) => {
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
       return res.status(400).json({ success: false, message: "Invalid hospital id" });
@@ -407,18 +407,24 @@ const verifyHospital = async (req, res) => {
         data: {
           title: "Hospital verification complete",
           message: "Hospital verification completed successfully."
+        }
+      }
+      );
+
+    }   // <-- Closing brace for if (status === "Verified") block
+
     return res.status(200).json({
-      success: true,
-      message: `Hospital ${status.toLowerCase()} successfully`,
-      hospital: {
-        id: hospital._id,
-        hospitalName: hospital.hospitalName,
-        email: hospital.email,
-        status: hospital.status,
-        isVerified: hospital.isVerified,
-      },
-    });
-  } catch (error) {
+    success: true,
+    message: `Hospital ${status.toLowerCase()} successfully`,
+    hospital: {
+      id: hospital._id,
+      hospitalName: hospital.hospitalName,
+      email: hospital.email,
+      status: hospital.status,
+      isVerified: hospital.isVerified,
+    },
+  });
+} catch (error) {
     console.error("Verify hospital error:", error);
 
     return res.status(500).json({
@@ -487,7 +493,7 @@ const getHospitalDashboard = async (req, res) => {
         pendingReceivedRequests: received.Pending || 0,
         acceptedRequests: (sent.Accepted || 0) + (received.Accepted || 0),
       },
-      recentRequests,
+      recentRequests: recentRequests,
     });
   } catch (error) {
     console.error("Hospital dashboard error:", error);
