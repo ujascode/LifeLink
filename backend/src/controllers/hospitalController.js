@@ -4,6 +4,7 @@ const OrganRequest = require("../models/OrganRequest");
 const mongoose = require("mongoose");
 const Notification = require("../models/Notification");
 const notificationService = require("../services/notificationService");
+const https = require("https");
 // ==========================================
 // GET ALL HOSPITALS
 // ==========================================
@@ -155,7 +156,57 @@ const getNearbyHospitals = async (req, res) => {
       success: false,
       message: "Server error while fetching nearby hospitals",
     });
-  }
+  };
+
+// ==========================================
+// GEOCODING USING NOMINATIM (OPENSTREETMAP)
+// ==========================================
+
+const geocodeLocation = async (city, state) => {
+  return new Promise((resolve, reject) => {
+    // Build the query string for Nominatim
+    const query = encodeURIComponent(`${city}, ${state}`);
+    const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&addressdetails=1`;
+
+    const req = https.get(url, (res) => {
+      let data = '';
+
+      // A chunk of data has been received.
+      res.on('data', (chunk) => {
+        data += chunk;
+      });
+
+      // The whole response has been received.
+      res.on('end', () => {
+        try {
+          const parsedData = JSON.parse(data);
+          if (parsedData.length === 0) {
+            resolve(null); // No results found
+          } else {
+            const result = parsedData[0];
+            resolve({
+              latitude: parseFloat(result.lat),
+              longitude: parseFloat(result.lon),
+              displayName: result.display_name,
+            });
+          }
+        } catch (e) {
+          reject(new Error('Failed to parse geocoding response'));
+        }
+      });
+    });
+
+    req.on('error', (e) => {
+      reject(new Error(`Error with the geocoding request: ${e.message}`));
+    });
+
+    // Set timeout to 5 seconds
+    req.setTimeout(5000, () => {
+      req.destroy();
+      reject(new Error('Geocoding request timeout'));
+    });
+  });
+};
 };
   try {
     if (!mongoose.isValidObjectId(req.params.id)) {
@@ -444,6 +495,40 @@ const getHospitalDashboard = async (req, res) => {
   }
 };
 
+// Geocode controller function
+const geocode = async (req, res) => {
+  try {
+    const { city, state } = req.query;
+
+    if (!city || !state) {
+      return res.status(400).json({
+        success: false,
+        message: "City and state are required for geocoding",
+      });
+    }
+
+    const result = await geocodeLocation(city, state);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        message: "Location not found",
+      });
+    }
+
+    res.json({
+      success: true,
+      data: result,
+    });
+  } catch (error) {
+    console.error("Geocoding error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Geocoding service error",
+    });
+  }
+};
+
 module.exports = {
   getHospitals,
   getHospitalById,
@@ -452,4 +537,6 @@ module.exports = {
   updateMyProfile,
   verifyHospital,
   getNearbyHospitals,
+  geocodeLocation,
+  geocode,
 };

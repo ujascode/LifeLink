@@ -56,6 +56,11 @@ const createOrgan = async (req, res) => {
       });
     }
 
+    // Set coordinates for geospatial queries
+    if (location && location.latitude !== undefined && location.longitude !== undefined) {
+      location.coordinates = [location.longitude, location.latitude];
+    }
+
     const organ = await Organ.create({
       hospital: hospitalId,
       organType,
@@ -90,7 +95,61 @@ const getOrgans = async (req, res) => {
   try {
     const filter = {};
     const requestedStatus = req.query.status;
+    const { organType, bloodGroup, city, state, latitude, longitude, radius } = req.query;
 
+    // Add organType and bloodGroup if provided
+    if (organType) filter.organType = organType;
+    if (bloodGroup) filter.bloodGroup = bloodGroup;
+
+    // For location, we can do city and state exact matches (case insensitive)
+    if (city) {
+      filter["location.city"] = new RegExp(city, "i");
+    }
+    if (state) {
+      filter["location.state"] = new RegExp(state, "i");
+    }
+
+    // Proximity search using latitude and longitude
+    if (latitude !== undefined && longitude !== undefined) {
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+      const rad = radius ? parseFloat(radius) : 50; // default radius 50 km
+
+      // Validate latitude and longitude
+      if (isNaN(lat) || lat < -90 || lat > 90) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid latitude. Must be a number between -90 and 90.",
+        });
+      }
+      if (isNaN(lng) || lng < -180 || lng > 180) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid longitude. Must be a number between -180 and 180.",
+        });
+      }
+      if (isNaN(rad) || rad <= 0 || rad > 200) {
+        return res.status(400).json({
+          success: false,
+          message: "Invalid radius. Must be a positive number between 0 and 200 km.",
+        });
+      }
+
+      // Convert radius from kilometers to meters for $maxDistance
+      const radiusInMeters = rad * 1000;
+
+      filter.location.coordinates = {
+        $nearSphere: {
+          $geometry: {
+            type: "Point",
+            coordinates: [lng, lat]
+          },
+          $maxDistance: radiusInMeters
+        }
+      };
+    }
+
+    // Existing logic for status and mine
     if (req.user.role === "admin") {
       if (requestedStatus) filter.status = requestedStatus;
     } else if (req.query.mine === "true") {
@@ -213,6 +272,14 @@ const updateOrgan = async (req, res) => {
         organ[field] = req.body[field];
       }
     });
+
+    // Update coordinates for geospatial queries if location was modified
+    if (req.body.location !== undefined) {
+      const loc = req.body.location;
+      if (loc.latitude !== undefined && loc.longitude !== undefined) {
+        organ.location.coordinates = [loc.longitude, loc.latitude];
+      }
+    }
 
     await organ.save();
 

@@ -21,12 +21,14 @@ const organSchema = new mongoose.Schema(
         "Cornea",
       ],
       trim: true,
+      index: true, // Index for faster organType searches
     },
 
     bloodGroup: {
       type: String,
       required: true,
       enum: ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"],
+      index: true, // Index for faster bloodGroup searches
     },
 
     donorAge: {
@@ -45,6 +47,7 @@ const organSchema = new mongoose.Schema(
     availabilityDate: {
       type: Date,
       required: true,
+      index: true, // Index for availabilityDate (useful for sorting)
     },
 
     location: {
@@ -56,11 +59,13 @@ const organSchema = new mongoose.Schema(
       city: {
         type: String,
         required: true,
+        index: true, // Index for city searches
       },
 
       state: {
         type: String,
         required: true,
+        index: true, // Index for state searches
       },
 
       latitude: {
@@ -70,12 +75,18 @@ const organSchema = new mongoose.Schema(
       longitude: {
         type: Number,
       },
+
+      coordinates: {
+        type: [Number], // [longitude, latitude]
+        index: '2dsphere'
+      }
     },
 
     status: {
       type: String,
       enum: ["Available", "Reserved", "Transplanted", "Expired", "Removed"],
       default: "Available",
+      index: true, // Index for status
     },
 
     notes: {
@@ -88,5 +99,8 @@ const organSchema = new mongoose.Schema(
     timestamps: true,
   },
 );
+
+// Index for location-based queries (city, state) - already covered by individual indexes
+// 2dsphere index for proximity search is on the coordinates field
 
 module.exports = mongoose.model("Organ", organSchema);

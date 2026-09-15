@@ -8,6 +8,7 @@ const {
   updateMyProfile,
   verifyHospital,
   getNearbyHospitals,
+  geocode,
 } = require("../controllers/hospitalController");
 
 const { authenticate } = require("../middleware/authMiddleware");
@@ -50,6 +51,9 @@ router.put(
 
 // GET NEARBY HOSPITALS
 router.get("/nearby", authenticate, getNearbyHospitals);
+
+// GEOCODING
+router.get("/geocode", authenticate, authorizeRoles("hospital"), geocode);
 
 // GET HOSPITAL BY ID
 router.get("/:id", authenticate, getHospitalById);

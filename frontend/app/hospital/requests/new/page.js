@@ -801,6 +801,7 @@ export default function NewOrganRequestPage() {
 
               {/* HOSPITAL RESULTS */}
               <div className="lg:col-span-1 space-y-6">
+                <>
                 {/* Nearest Hospital Highlight */}
                 {nearestHospital && (
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
@@ -842,12 +843,9 @@ export default function NewOrganRequestPage() {
                               Send Request
                             </button>
                           </div>
-                        </div>
                       </div>
-                    </div>
                   </div>
                 )}
-
                 {/* All Hospitals List */}
                 {hospitals.length > 0 && (
                   <>
@@ -873,7 +871,7 @@ export default function NewOrganRequestPage() {
                             <div className="flex-shrink-0">
                               <div className="bg-green-100 text-green-800 rounded-full p-2">
                                 <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWeight="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 00-5.618 4.016" />
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWeight="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0-5.618 4.016" />
                                 </svg>
                                 </div>
                               </div>
@@ -915,6 +913,7 @@ export default function NewOrganRequestPage() {
                     )}
                   </>
                 )}
+              </>
               </div>
             </div>
 
