@@ -44,7 +44,9 @@ const getHospitals = async (req, res) => {
 
 const getHospitalById = async (req, res) => {
   try {
-    if (!mongoose.isValidObjectId(req.params.id)) {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid hospital id",
@@ -54,7 +56,7 @@ const getHospitalById = async (req, res) => {
     // Hospital users can only view their own profile
     if (
       req.user.role === "hospital" &&
-      req.user.id.toString() !== req.params.id.toString()
+      req.user.id.toString() !== id.toString()
     ) {
       return res.status(403).json({
         success: false,
@@ -62,7 +64,7 @@ const getHospitalById = async (req, res) => {
       });
     }
 
-    const hospital = await Hospital.findById(req.params.id).select(
+    const hospital = await Hospital.findById(id).select(
       "-password -resetPasswordToken -resetPasswordExpires",
     );
 
@@ -124,7 +126,7 @@ const getNearbyHospitals = async (req, res) => {
       });
     }
 
-    // Only verified hospitals
+    // Get verified hospitals only
     const hospitals = await Hospital.find({
       status: "Verified",
       isVerified: true,
@@ -143,13 +145,14 @@ const getNearbyHospitals = async (req, res) => {
     }
 
     // Haversine distance calculation
-    const R = 6378.1;
+    const EARTH_RADIUS_KM = 6378.1;
 
     const hospitalsWithDistance = hospitals
       .map((hospital) => {
         const hospitalLat = Number(hospital.latitude);
         const hospitalLng = Number(hospital.longitude);
 
+        // Skip hospitals without valid coordinates
         if (!Number.isFinite(hospitalLat) || !Number.isFinite(hospitalLng)) {
           return null;
         }
@@ -167,7 +170,7 @@ const getNearbyHospitals = async (req, res) => {
 
         const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 
-        const distance = R * c;
+        const distance = EARTH_RADIUS_KM * c;
 
         if (distance > rad) {
           return null;
@@ -188,7 +191,7 @@ const getNearbyHospitals = async (req, res) => {
       .filter(Boolean)
       .sort((a, b) => a.distance - b.distance);
 
-    // Maximum 50 results
+    // Limit maximum results
     const limitedHospitals = hospitalsWithDistance.slice(0, 50);
 
     return res.status(200).json({
@@ -357,7 +360,7 @@ const updateMyProfile = async (req, res) => {
       });
     }
 
-    // Validate coordinates when provided
+    // Validate latitude
     if (latitude !== undefined) {
       const lat = Number(latitude);
 
@@ -371,6 +374,7 @@ const updateMyProfile = async (req, res) => {
       hospital.latitude = lat;
     }
 
+    // Validate longitude
     if (longitude !== undefined) {
       const lng = Number(longitude);
 
@@ -436,7 +440,9 @@ const updateMyProfile = async (req, res) => {
 
 const verifyHospital = async (req, res) => {
   try {
-    if (!mongoose.isValidObjectId(req.params.id)) {
+    const { id } = req.params;
+
+    if (!mongoose.isValidObjectId(id)) {
       return res.status(400).json({
         success: false,
         message: "Invalid hospital id",
@@ -454,7 +460,7 @@ const verifyHospital = async (req, res) => {
       });
     }
 
-    const hospital = await Hospital.findById(req.params.id);
+    const hospital = await Hospital.findById(id);
 
     if (!hospital) {
       return res.status(404).json({
@@ -468,8 +474,7 @@ const verifyHospital = async (req, res) => {
 
     await hospital.save();
 
-    // Notify hospital/admin after successful update.
-    // Notification failure should not make verification fail.
+    // Notifications should not break verification.
     try {
       if (status === "Verified") {
         await notificationService.sendHospitalNotification({
@@ -551,7 +556,7 @@ const getHospitalDashboard = async (req, res) => {
 
     const [organCounts, sentCounts, receivedCounts, recentRequests] =
       await Promise.all([
-        // Hospital-owned organ counts
+        // Organ counts
         Organ.aggregate([
           {
             $match: {
@@ -616,7 +621,9 @@ const getHospitalDashboard = async (req, res) => {
           .populate("organ", "organType bloodGroup status")
           .populate("requestingHospital", "hospitalName city")
           .populate("supplyingHospital", "hospitalName city")
-          .sort({ createdAt: -1 })
+          .sort({
+            createdAt: -1,
+          })
           .limit(5)
           .lean(),
       ]);
@@ -625,11 +632,14 @@ const getHospitalDashboard = async (req, res) => {
       Object.fromEntries(rows.map((row) => [row._id, row.count]));
 
     const organs = counts(organCounts);
+
     const sent = counts(sentCounts);
+
     const received = counts(receivedCounts);
 
     return res.status(200).json({
       success: true,
+
       hospital,
 
       stats: {

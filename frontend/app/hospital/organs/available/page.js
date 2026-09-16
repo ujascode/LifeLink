@@ -1,16 +1,9 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
-import L from "leaflet";
 import api from "@/services/api";
 
-// Initialize Leaflet default icon (to avoid missing icon issues)
-delete L.Icon.Default.prototype._getIconUrl;
-L.Icon.Default.mergeOptions({
-  iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png").default,
-  iconUrl: require("leaflet/dist/images/marker-icon.png").default,
-  shadowUrl: require("leaflet/dist/images/marker-shadow.png").default,
-});
+let L;
 
 export default function FindOrgans() {
   const [organs, setOrgans] = useState([]);
@@ -25,11 +18,28 @@ export default function FindOrgans() {
   });
   const mapRef = useRef(null);
   const [map, setMap] = useState(null);
+  const [leafletReady, setLeafletReady] = useState(false);
   const [userLocation, setUserLocation] = useState(null); // { latitude, longitude }
   const [nearestHospitalOrganId, setNearestHospitalOrganId] = useState(null);
   const [selectedOrganId, setSelectedOrganId] = useState(null); // For marker click selection
   const abortControllerRef = useRef(null);
   const organMarkersRef = useRef(new Map());
+
+  useEffect(() => {
+    let cancelled = false;
+    import("leaflet").then((module) => {
+      if (cancelled) return;
+      L = module.default || module;
+      delete L.Icon.Default.prototype._getIconUrl;
+      L.Icon.Default.mergeOptions({
+        iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png").default,
+        iconUrl: require("leaflet/dist/images/marker-icon.png").default,
+        shadowUrl: require("leaflet/dist/images/marker-shadow.png").default,
+      });
+      setLeafletReady(true);
+    });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -64,8 +74,11 @@ export default function FindOrgans() {
 
   // Clear selected organ ID and marker references when organs list or nearest hospital changes
   useEffect(() => {
-    setSelectedOrganId(null);
-    organMarkersRef.current.clear();
+    const markersRef = organMarkersRef.current;
+    return () => {
+      setSelectedOrganId(null);
+      markersRef.clear();
+    };
   }, [organs, nearestHospitalOrganId]);
 
   // Fetch organs based on search parameters
@@ -132,6 +145,7 @@ export default function FindOrgans() {
 
   // Initialize or update the map
   useEffect(() => {
+    if (!leafletReady || !L) return;
     if (mapRef.current) {
       // Initialize map if not already initialized
       if (!map) {
@@ -156,8 +170,8 @@ export default function FindOrgans() {
       if (userLocation) {
         const userMarker = L.marker([userLocation.latitude, userLocation.longitude], {
           icon: L.icon({
-            iconUrl: require("leaflet/dist/images/marker-icon-2x-green.png").default,
-            iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x-green.png").default,
+            iconUrl: require("leaflet/dist/images/marker-icon.png").default,
+            iconRetinaUrl: require("leaflet/dist/images/marker-icon-2x.png").default,
             shadowUrl: require("leaflet/dist/images/marker-shadow.png").default,
             iconSize: [25, 41],
             iconAnchor: [12, 41],
@@ -256,7 +270,7 @@ export default function FindOrgans() {
         }
       }
     }
-  }, [organs, map, userLocation]);
+  }, [organs, map, userLocation, leafletReady]);
 
   // Reset search
   const resetSearch = () => {

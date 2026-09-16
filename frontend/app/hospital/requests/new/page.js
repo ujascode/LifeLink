@@ -120,12 +120,23 @@ export default function NewOrganRequestPage() {
     }));
   };
 
+  function calculateDistance(lat1, lon1, lat2, lon2) {
+    const toRad = (value) => (value * Math.PI) / 180;
+    const R = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon / 2) ** 2;
+    return R * (2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a)));
+  }
+
   /* ======================
      FILTER ORGANS
   ====================== */
   // Recalculate filteredOrgans when organType, bloodGroup, city, or organs change
   useEffect(() => {
     if (!organs || organs.length === 0) {
+      // The filtered list is intentionally synchronized with the API result.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setFilteredOrgans([]);
       return;
     }
@@ -154,6 +165,8 @@ export default function NewOrganRequestPage() {
       !userLocation.longitude ||
       filteredOrgans.length === 0
     ) {
+      // Clear derived hospital results when the search cannot be evaluated.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setHospitals([]);
       setNearestHospital(null);
       return;
@@ -247,21 +260,6 @@ export default function NewOrganRequestPage() {
   /* ======================
      DISTANCE CALCULATION
   ====================== */
-  const calculateDistance = (lat1, lon1, lat2, lon2) => {
-    const toRad = (value) => (value * Math.PI) / 180;
-    const R = 6371; // Earth's radius in km
-    const dLat = toRad(lat2 - lat1);
-    const dLon = toRad(lon2 - lon1);
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(lat1)) *
-        Math.cos(toRad(lat2)) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-    return R * c;
-  };
-
   /* ======================
      MAP INITIALIZATION & ANIMATION
   ====================== */
@@ -801,7 +799,6 @@ export default function NewOrganRequestPage() {
 
               {/* HOSPITAL RESULTS */}
               <div className="lg:col-span-1 space-y-6">
-                <>
                 {/* Nearest Hospital Highlight */}
                 {nearestHospital && (
                   <div className="bg-blue-50 border-l-4 border-blue-500 p-4 mb-4">
@@ -844,6 +841,7 @@ export default function NewOrganRequestPage() {
                             </button>
                           </div>
                       </div>
+                    </div>
                   </div>
                 )}
                 {/* All Hospitals List */}
@@ -862,11 +860,7 @@ export default function NewOrganRequestPage() {
                               ? "border-blue-500 bg-blue-50"
                               : ""
                           }`}
-                          onClick={() => {
-                            setSelectedHospital(hospital);
-                            flyToHospital(hospital);
-                          }}
-                        >
+                          onClick={() => { setSelectedHospital(hospital); flyToHospital(hospital); }} >
                           <div className="flex items-start">
                             <div className="flex-shrink-0">
                               <div className="bg-green-100 text-green-800 rounded-full p-2">
@@ -875,7 +869,6 @@ export default function NewOrganRequestPage() {
                                 </svg>
                                 </div>
                               </div>
-                            </div>
                             <div className="ml-4">
                               <h4 className="font-semibold text-gray-900">
                                 {hospital.hospitalName}
@@ -911,9 +904,8 @@ export default function NewOrganRequestPage() {
                         </p>
                       </>
                     )}
-                  </>
+                  </div>
                 )}
-              </>
               </div>
             </div>
 
