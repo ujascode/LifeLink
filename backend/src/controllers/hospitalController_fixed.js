@@ -1,0 +1,592 @@
+const Hospital = require("../models/Hospital");
+const Organ = require("../models/Organ");
+const OrganRequest = require("../models/OrganRequest");
+const mongoose = require("mongoose");
+const Notification = require("../models/Notification");
+const notificationService = require("../services/notificationService");
+const https = require("https");
+// ==========================================
+// GET ALL HOSPITALS
+// ==========================================
+
+const getHospitals = async (req, res) => {
+  try {
+    const filter =
+      req.user.role === "admin" ? {} : { status: "Verified", isVerified: true };
+    const hospitals = await Hospital.find(filter)
+      .select("-password -resetPasswordToken -resetPasswordExpires")
+      .sort({ createdAt: -1 });
+
+    return res.status(200).json({
+      success: true,
+      count: hospitals.length,
+      hospitals,
+    });
+  } catch (error) {
+    console.error("Get hospitals error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching hospitals",
+    });
+  }
+};
+
+// ==========================================
+// GET HOSPITAL BY ID
+// ==========================================
+
+const getHospitalById = async (req, res) => {
+  try {
+    if (!mongoose.isValidObjectId(req.params.id)) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Invalid hospital id" });
+    }
+
+    if (
+      req.user.role === "hospital" &&
+      req.user.id.toString() !== req.params.id
+    ) {
+      return res.status(403).json({
+        success: false,
+        message: "You can only view your own hospital profile",
+      });
+    }
+
+    const hospital = await Hospital.findById(req.params.id).select(
+      "-password -resetPasswordToken -resetPasswordExpires",
+    );
+
+    if (!hospital) {
+      return res.status(404).json({
+        success: false,
+        message: "Hospital not found",
+      });
+    }
+
+    return res.status(200).json({
+      success: true,
+      hospital,
+    });
+  } catch (error) {
+    console.error("Get hospital error:", error);
+
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching hospital",
+    });
+  }
+};
+
+// ==========================================
+// GET NEARBY HOSPITALS
+// ==========================================
+
+const getNearbyHospitals = async (req, res) => {
+  try {
+    const { latitude, longitude, radius = 10 } = req.query;
+
+    // Validate parameters
+    const lat = parseFloat(latitude);
+    const lng = parseFloat(longitude);
+    const rad = parseFloat(radius);
+
+    if (isNaN(lat) || lat < -90 || lat > 90) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid latitude. Must be a number between -90 and 90.",
+      });
+    }
+
+    if (isNaN(lng) || lng < -180 || lng > 180) {
+      return res.status(400).json({
+        success: false,
+        message: "Invalid longitude. Must be a number between -180 and 180.",
+      });
+    }
+
+    if (isNaN(rad) || rad <= 0 || rad > 100) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Invalid radius. Must be a positive number between 0 and 100 km.",
+      });
+    }
+
+    // Find hospitals using geospatial query
+    // Since we don't have a 2dsphere index on latitude/longitude fields,
+    // we'll use MongoDB aggregation with $geoNear or calculate distances manually
+    // For simplicity and compatibility, we'll calculate distances in memory after filtering
+
+    // First, get all verified hospitals
+    const hospitals = await Hospital.find({
+      status: "Verified",
+      isVerified: true,
+    })
+      .select(
+        "_id hospitalName email phone address city state latitude longitude",
+      )
+      .lean(); // Use lean() for better performance
+
+    // If no hospitals found, return empty result
+    if (!hospitals || hospitals.length === 0) {
+      return res.json({
+        success: true,
+        count: 0,
+        hospitals: [],
+      });
+    }
+
+    // Calculate distance for each hospital and filter by radius
+    const hospitalsWithDistance = hospitals
+      .map((hospital) => {
+        // Skip hospitals without coordinates
+        if (
+          hospital.latitude === undefined ||
+          hospital.longitude === undefined ||
+          hospital.latitude === null ||
+          hospital.longitude === null ||
+          isNaN(hospital.latitude) ||
+          isNaN(hospital.longitude)
+        ) {
+          return null;
+        }
+
+        // Calculate distance using haversine formula
+        const R = 6378.1; // Earth's radius in km
+        const dLat = ((hospital.latitude - lat) * Math.PI) / 180;
+        const dLng = ((hospital.longitude - lng) * Math.PI) / 180;
+        const a =
+          Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+          Math.cos((lat * Math.PI) / 180) *
+            Math.cos((hospital.latitude * Math.PI) / 180) *
+            Math.sin(dLng / 2) *
+            Math.sin(dLng / 2);
+        const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const distance = R * c; // Distance in km
+
+        // Only include hospitals within the specified radius
+        if (distance <= rad) {
+          return {
+            id: hospital._id,
+            hospitalName: hospital.hospitalName,
+            city: hospital.city,
+            state: hospital.state,
+            address: hospital.address,
+            phone: hospital.phone,
+            latitude: hospital.latitude,
+            longitude: hospital.longitude,
+            distance: parseFloat(distance.toFixed(2)), // Round to 2 decimal places
+          };
+        }
+        return null;
+      })
+      .filter((hospital) => hospital !== null) // Remove null values
+      .sort((a, b) => a.distance - b.distance); // Sort by distance ascending
+
+    // Limit results to prevent overload
+    const limitedHospitals = hospitalsWithDistance.slice(0, 50);
+
+    return res.json({
+      success: true,
+      count: limitedHospitals.length,
+      hospitals: limitedHospitals,
+    });
+  } catch (error) {
+    console.error("Get nearby hospitals error:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Server error while fetching nearby hospitals",
+    });
+  }
+
+  // ==========================================
+  // GEOCODING USING NOMINATIM (OPENSTREETMAP)
+  // ==========================================
+
+  const geocodeLocation = async (city, state) => {
+    return new Promise((resolve, reject) => {
+      // Build the query string for Nominatim
+      const query = encodeURIComponent(`${city}, ${state}`);
+      const url = `https://nominatim.openstreetmap.org/search?format=json&q=${query}&limit=1&addressdetails=1`;
+
+      const req = https.get(url, (res) => {
+        let data = "";
+
+        // A chunk of data has been received.
+        res.on("data", (chunk) => {
+          data += chunk;
+        });
+
+        // The whole response has been received.
+        res.on("end", () => {
+          try {
+            const parsedData = JSON.parse(data);
+            if (parsedData.length === 0) {
+              resolve(null); // No results found
+            } else {
+              const result = parsedData[0];
+              resolve({
+                latitude: parseFloat(result.lat),
+                longitude: parseFloat(result.lon),
+                displayName: result.display_name,
+              });
+            }
+          } catch (e) {
+            reject(new Error("Failed to parse geocoding response"));
+          }
+        });
+      });
+
+      req.on("error", (e) => {
+        reject(new Error(`Error with the geocoding request: ${e.message}`));
+      });
+
+      // Set timeout to 5 seconds
+      req.setTimeout(5000, () => {
+        req.destroy();
+        reject(new Error("Geocoding request timeout"));
+      });
+    });
+  };
+
+  // ==========================================
+  // GET LOGGED-IN HOSPITAL PROFILE
+  // ==========================================
+
+  const getMyProfile = async (req, res) => {
+    try {
+      const hospital = await Hospital.findById(req.user.id).select(
+        "-password -resetPasswordToken -resetPasswordExpires",
+      );
+
+      if (!hospital) {
+        return res.status(404).json({
+          success: false,
+          message: "Hospital profile not found",
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        hospital,
+      });
+    } catch (error) {
+      console.error("Get profile error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error while fetching profile",
+      });
+    }
+  };
+
+  // ==========================================
+  // UPDATE LOGGED-IN HOSPITAL PROFILE
+  // ==========================================
+
+  const updateMyProfile = async (req, res) => {
+    try {
+      const hospital = await Hospital.findById(req.user.id);
+
+      if (!hospital) {
+        return res.status(404).json({
+          success: false,
+          message: "Hospital profile not found",
+        });
+      }
+
+      const {
+        hospitalName,
+        phone,
+        address,
+        city,
+        state,
+        pincode,
+        latitude,
+        longitude,
+      } = req.body;
+
+      if (
+        hospitalName !== undefined &&
+        (!String(hospitalName).trim() || String(hospitalName).length > 160)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message: "Hospital name must be between 1 and 160 characters",
+        });
+      }
+
+      if (hospitalName !== undefined) {
+        hospital.hospitalName = hospitalName;
+      }
+
+      if (phone !== undefined) {
+        hospital.phone = phone;
+      }
+
+      if (address !== undefined) {
+        hospital.address = address;
+      }
+
+      if (city !== undefined) {
+        hospital.city = city;
+      }
+
+      if (state !== undefined) {
+        hospital.state = state;
+      }
+
+      if (pincode !== undefined) {
+        hospital.pincode = pincode;
+      }
+
+      if (latitude !== undefined) {
+        hospital.latitude = latitude;
+      }
+
+      if (longitude !== undefined) {
+        hospital.longitude = longitude;
+      }
+
+      await hospital.save();
+
+      const updatedHospital = await Hospital.findById(hospital._id).select(
+        "-password -resetPasswordToken -resetPasswordExpires",
+      );
+
+      return res.status(200).json({
+        success: true,
+        message: "Hospital profile updated successfully",
+        hospital: updatedHospital,
+      });
+    } catch (error) {
+      console.error("Update profile error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error while updating profile",
+      });
+    }
+  };
+
+  // ==========================================
+  // VERIFY HOSPITAL
+  // ADMIN ONLY
+  // ==========================================
+
+  const verifyHospital = async (req, res) => {
+    try {
+      if (!mongoose.isValidObjectId(req.params.id)) {
+        return res
+          .status(400)
+          .json({ success: false, message: "Invalid hospital id" });
+      }
+      const { status } = req.body || {};
+
+      const allowedStatuses = ["Verified", "Rejected", "Inactive"];
+
+      if (!allowedStatuses.includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: "Status must be Verified, Rejected, or Inactive",
+        });
+      }
+
+      const hospital = await Hospital.findById(req.params.id);
+
+      if (!hospital) {
+        return res.status(404).json({
+          success: false,
+          message: "Hospital not found",
+        });
+      }
+
+      hospital.status = status;
+      hospital.isVerified = status === "Verified";
+
+      await hospital.save();
+
+      if (status === "Verified") {
+        await notificationService.sendHospitalNotification({
+          hospitalId: hospital._id,
+          event: "HospitalVerified",
+          data: {
+            title: "Hospital verification complete",
+            message:
+              "Your hospital is now verified and can participate in organ exchange.",
+          },
+        });
+
+        await notificationService.sendAdminNotification({
+          adminId: req.user.id,
+          event: "HospitalVerified",
+          data: {
+            title: "Hospital verification complete",
+            message: "Hospital verification completed successfully.",
+          },
+        });
+      } // <-- Closing brace for if (status === "Verified") block
+
+      return res.status(200).json({
+        success: true,
+        message: `Hospital ${status.toLowerCase()} successfully`,
+        hospital: {
+          id: hospital._id,
+          hospitalName: hospital.hospitalName,
+          email: hospital.email,
+          status: hospital.status,
+          isVerified: hospital.isVerified,
+        },
+      });
+    } catch (error) {
+      console.error("Verify hospital error:", error);
+
+      return res.status(500).json({
+        success: false,
+        message: "Server error while verifying hospital",
+      });
+    }
+  };
+
+  // ==========================================
+  // HOSPITAL DASHBOARD
+  // ==========================================
+
+  const getHospitalDashboard = async (req, res) => {
+    try {
+      const hospitalId = req.user.id;
+      const hospital = await Hospital.findById(hospitalId)
+        .select("hospitalName email city state status isVerified")
+        .lean();
+
+      if (!hospital) {
+        return res
+          .status(404)
+          .json({ success: false, message: "Hospital profile not found" });
+      }
+
+      const [organCounts, sentCounts, receivedCounts, recentRequests] =
+        await Promise.all([
+          Organ.aggregate([
+            { $match: { hospital: new mongoose.Types.ObjectId(hospitalId) } },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ]),
+          OrganRequest.aggregate([
+            {
+              $match: {
+                requestingHospital: new mongoose.Types.ObjectId(hospitalId),
+              },
+            },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ]),
+          OrganRequest.aggregate([
+            {
+              $match: {
+                supplyingHospital: new mongoose.Types.ObjectId(hospitalId),
+              },
+            },
+            { $group: { _id: "$status", count: { $sum: 1 } } },
+          ]),
+          OrganRequest.find({
+            $or: [
+              { requestingHospital: hospitalId },
+              { supplyingHospital: hospitalId },
+            ],
+          })
+            .populate("organ", "organType bloodGroup status")
+            .populate("requestingHospital", "hospitalName city")
+            .populate("supplyingHospital", "hospitalName city")
+            .sort({ createdAt: -1 })
+            .limit(5)
+            .lean(),
+        ]);
+
+      const counts = (rows) =>
+        Object.fromEntries(rows.map((row) => [row._id, row.count]));
+      const organs = counts(organCounts);
+      const sent = counts(sentCounts);
+      const received = counts(receivedCounts);
+
+      return res.json({
+        success: true,
+        hospital,
+        stats: {
+          totalOrgans: Object.values(organs).reduce(
+            (sum, value) => sum + value,
+            0,
+          ),
+          availableOrgans: organs.Available || 0,
+          reservedOrgans: organs.Reserved || 0,
+          transplantedOrgans: organs.Transplanted || 0,
+          expiredOrgans: organs.Expired || 0,
+          sentRequests: Object.values(sent).reduce(
+            (sum, value) => sum + value,
+            0,
+          ),
+          pendingSentRequests: sent.Pending || 0,
+          receivedRequests: Object.values(received).reduce(
+            (sum, value) => sum + value,
+            0,
+          ),
+          pendingReceivedRequests: received.Pending || 0,
+          acceptedRequests: (sent.Accepted || 0) + (received.Accepted || 0),
+        },
+        recentRequests: recentRequests,
+      });
+    } catch (error) {
+      console.error("Hospital dashboard error:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Server error while loading dashboard",
+      });
+    }
+  };
+
+  // Geocode controller function
+  const geocode = async (req, res) => {
+    try {
+      const { city, state } = req.query;
+
+      if (!city || !state) {
+        return res.status(400).json({
+          success: false,
+          message: "City and state are required for geocoding",
+        });
+      }
+
+      const result = await geocodeLocation(city, state);
+
+      if (!result) {
+        return res.status(404).json({
+          success: false,
+          message: "Location not found",
+        });
+      }
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      console.error("Geocoding error:", error);
+      res.status(500).json({
+        success: false,
+        message: "Geocoding service error",
+      });
+    }
+  };
+
+  module.exports = {
+    getHospitals,
+    getHospitalById,
+    getMyProfile,
+    getHospitalDashboard,
+    updateMyProfile,
+    verifyHospital,
+    getNearbyHospitals,
+    geocodeLocation,
+    geocode,
+  };
+};

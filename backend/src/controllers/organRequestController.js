@@ -3,8 +3,9 @@ const Organ = require("../models/Organ");
 const Hospital = require("../models/Hospital");
 const notificationService = require("../services/notificationService");
 
+// ============================================================
 // CREATE ORGAN REQUEST
-// ==========================================
+// ============================================================
 
 const createOrganRequest = async (req, res) => {
   try {
@@ -13,10 +14,7 @@ const createOrganRequest = async (req, res) => {
     const { organId, patientName, patientAge, patientGender, urgency, reason } =
       req.body;
 
-    // ------------------------------------------
     // Validate required fields
-    // ------------------------------------------
-
     if (
       !organId ||
       !patientName ||
@@ -31,10 +29,7 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // Check requesting hospital
-    // ------------------------------------------
-
+    // Validate requesting hospital
     const requestingHospital = await Hospital.findById(requestingHospitalId);
 
     if (!requestingHospital) {
@@ -54,10 +49,7 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
     // Find organ
-    // ------------------------------------------
-
     const organ = await Organ.findById(organId);
 
     if (!organ) {
@@ -67,10 +59,7 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
     // Organ must be available
-    // ------------------------------------------
-
     if (organ.status !== "Available") {
       return res.status(400).json({
         success: false,
@@ -78,10 +67,7 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // Prevent requesting own hospital organ
-    // ------------------------------------------
-
+    // Prevent requesting own hospital's organ
     if (organ.hospital.toString() === requestingHospitalId.toString()) {
       return res.status(400).json({
         success: false,
@@ -89,10 +75,7 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
     // Check supplying hospital
-    // ------------------------------------------
-
     const supplyingHospital = await Hospital.findById(organ.hospital);
 
     if (!supplyingHospital) {
@@ -102,10 +85,17 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // Prevent duplicate pending request
-    // ------------------------------------------
+    if (
+      !supplyingHospital.isVerified ||
+      supplyingHospital.status !== "Verified"
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Organs can only be requested from verified hospitals",
+      });
+    }
 
+    // Prevent duplicate pending request
     const existingRequest = await OrganRequest.findOne({
       organ: organId,
       requestingHospital: requestingHospitalId,
@@ -119,36 +109,36 @@ const createOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
     // Create request
-    // ------------------------------------------
-
     const organRequest = await OrganRequest.create({
       organ: organId,
       requestingHospital: requestingHospitalId,
       supplyingHospital: organ.hospital,
-
       patientName,
       patientAge,
       patientGender,
       urgency,
       reason,
-
       status: "Pending",
-    await notificationService.sendHospitalNotification({
-      hospitalId: organ.hospital,
-      event: "NewRequest",
-      data: {
-        title: "New organ request",
-        message: `${requestingHospital.hospitalName} requested your ${organ.organType}.`,
-        request: organRequest._id,
-      }
     });
 
-    // ------------------------------------------
-    // Return populated request
-    // ------------------------------------------
+    // Send notification
+    // Notification failure must not break request creation.
+    try {
+      await notificationService.sendHospitalNotification({
+        hospitalId: organ.hospital,
+        event: "NewRequest",
+        data: {
+          title: "New organ request",
+          message: `${requestingHospital.hospitalName} requested your ${organ.organType}.`,
+          request: organRequest._id,
+        },
+      });
+    } catch (notificationError) {
+      console.error("New organ request notification error:", notificationError);
+    }
 
+    // Populate request before returning
     const populatedRequest = await OrganRequest.findById(organRequest._id)
       .populate(
         "organ",
@@ -172,9 +162,9 @@ const createOrganRequest = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // GET SENT REQUESTS
-// ==========================================
+// ============================================================
 
 const getSentRequests = async (req, res) => {
   try {
@@ -200,9 +190,9 @@ const getSentRequests = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // GET RECEIVED REQUESTS
-// ==========================================
+// ============================================================
 
 const getReceivedRequests = async (req, res) => {
   try {
@@ -228,9 +218,9 @@ const getReceivedRequests = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // GET REQUEST BY ID
-// ==========================================
+// ============================================================
 
 const getOrganRequestById = async (req, res) => {
   try {
@@ -249,13 +239,14 @@ const getOrganRequestById = async (req, res) => {
       });
     }
 
-    // Only participating hospitals can view request
+    // Only participating hospitals can view this request
     const userId = req.user.id.toString();
 
-    if (
-      request.requestingHospital._id.toString() !== userId &&
-      request.supplyingHospital._id.toString() !== userId
-    ) {
+    const requestingHospitalId = request.requestingHospital?._id?.toString();
+
+    const supplyingHospitalId = request.supplyingHospital?._id?.toString();
+
+    if (requestingHospitalId !== userId && supplyingHospitalId !== userId) {
       return res.status(403).json({
         success: false,
         message: "You are not authorized to view this request",
@@ -276,15 +267,16 @@ const getOrganRequestById = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // RESPOND TO REQUEST
 // ACCEPT / REJECT
-// ==========================================
+// ============================================================
 
 const respondToOrganRequest = async (req, res) => {
   try {
     const { status, responseMessage } = req.body;
 
+    // Validate status
     if (!["Accepted", "Rejected"].includes(status)) {
       return res.status(400).json({
         success: false,
@@ -292,6 +284,7 @@ const respondToOrganRequest = async (req, res) => {
       });
     }
 
+    // Find request
     const request = await OrganRequest.findById(req.params.id);
 
     if (!request) {
@@ -309,6 +302,7 @@ const respondToOrganRequest = async (req, res) => {
       });
     }
 
+    // Request must be pending
     if (request.status !== "Pending") {
       return res.status(400).json({
         success: false,
@@ -316,6 +310,7 @@ const respondToOrganRequest = async (req, res) => {
       });
     }
 
+    // Find organ
     const organ = await Organ.findById(request.organ);
 
     if (!organ) {
@@ -325,15 +320,29 @@ const respondToOrganRequest = async (req, res) => {
       });
     }
 
-    // ------------------------------------------
-    // ACCEPT REQUEST
-    // ------------------------------------------
+    // ========================================================
+    // ACCEPT
+    // ========================================================
 
     if (status === "Accepted") {
+      /*
+       * Atomic update:
+       * Only one pending request can reserve an Available organ.
+       * This prevents two requests from reserving the same organ.
+       */
       const reservedOrgan = await Organ.findOneAndUpdate(
-        { _id: request.organ, status: "Available" },
-        { $set: { status: "Reserved" } },
-        { new: true },
+        {
+          _id: request.organ,
+          status: "Available",
+        },
+        {
+          $set: {
+            status: "Reserved",
+          },
+        },
+        {
+          new: true,
+        },
       );
 
       if (!reservedOrgan) {
@@ -346,34 +355,47 @@ const respondToOrganRequest = async (req, res) => {
       request.status = "Accepted";
     }
 
-    // ------------------------------------------
-    // REJECT REQUEST
-    // ------------------------------------------
+    // ========================================================
+    // REJECT
+    // ========================================================
 
     if (status === "Rejected") {
       request.status = "Rejected";
 
-      // Organ remains available
-      // A pending request cannot reserve an organ; leave its status unchanged.
+      // Organ remains Available.
     }
 
-    request.responseMessage = responseMessage;
+    request.responseMessage = responseMessage || "";
     request.respondedAt = new Date();
 
     await request.save();
 
-    await notificationService.sendHospitalNotification({
-      hospitalId: request.requestingHospital,
-      event: status === "Accepted" ? "RequestApproved" : "RequestRejected",
-      data: {
-        title: `Organ request ${status.toLowerCase()}`,
-        message: responseMessage || `Your organ request was ${status.toLowerCase()}.`,
-        request: request._id,
-      }
+    // Notify requesting hospital
+    try {
+      await notificationService.sendHospitalNotification({
+        hospitalId: request.requestingHospital,
+        event: status === "Accepted" ? "RequestApproved" : "RequestRejected",
+        data: {
+          title: `Organ request ${status.toLowerCase()}`,
+          message:
+            responseMessage ||
+            `Your organ request was ${status.toLowerCase()}.`,
+          request: request._id,
+        },
+      });
+    } catch (notificationError) {
+      console.error("Request response notification error:", notificationError);
+    }
+
+    // Populate response
     const populatedRequest = await OrganRequest.findById(request._id)
-      .populate("organ", "organType bloodGroup donorAge donorGender status location")
+      .populate(
+        "organ",
+        "organType bloodGroup donorAge donorGender status location",
+      )
       .populate("requestingHospital", "hospitalName email phone city state")
       .populate("supplyingHospital", "hospitalName email phone city state");
+
     return res.status(200).json({
       success: true,
       message: `Organ request ${status.toLowerCase()} successfully`,
@@ -389,9 +411,9 @@ const respondToOrganRequest = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // CANCEL REQUEST
-// ==========================================
+// ============================================================
 
 const cancelOrganRequest = async (req, res) => {
   try {
@@ -412,6 +434,7 @@ const cancelOrganRequest = async (req, res) => {
       });
     }
 
+    // Only pending requests can be cancelled
     if (request.status !== "Pending") {
       return res.status(400).json({
         success: false,
@@ -424,15 +447,27 @@ const cancelOrganRequest = async (req, res) => {
 
     await request.save();
 
-    await notificationService.sendHospitalNotification({
-      hospitalId: request.supplyingHospital,
-      event: "RequestUpdated",
-      data: {
-        title: "Organ request cancelled",
-        message: "An organ request has been cancelled by the requesting hospital.",
-        request: request._id,
-      }
-    });
+    // Notify supplying hospital
+    try {
+      await notificationService.sendHospitalNotification({
+        hospitalId: request.supplyingHospital,
+        event: "RequestUpdated",
+        data: {
+          title: "Organ request cancelled",
+          message:
+            "An organ request has been cancelled by the requesting hospital.",
+          request: request._id,
+        },
+      });
+    } catch (notificationError) {
+      console.error(
+        "Request cancellation notification error:",
+        notificationError,
+      );
+    }
+
+    return res.status(200).json({
+      success: true,
       message: "Organ request cancelled successfully",
       request,
     });
@@ -446,9 +481,9 @@ const cancelOrganRequest = async (req, res) => {
   }
 };
 
-// ==========================================
+// ============================================================
 // COMPLETE REQUEST
-// ==========================================
+// ============================================================
 
 const completeOrganRequest = async (req, res) => {
   try {
@@ -474,6 +509,7 @@ const completeOrganRequest = async (req, res) => {
       });
     }
 
+    // Request must be accepted
     if (request.status !== "Accepted") {
       return res.status(400).json({
         success: false,
@@ -481,6 +517,7 @@ const completeOrganRequest = async (req, res) => {
       });
     }
 
+    // Find organ
     const organ = await Organ.findById(request.organ);
 
     if (!organ) {
@@ -490,6 +527,7 @@ const completeOrganRequest = async (req, res) => {
       });
     }
 
+    // Organ must be reserved
     if (organ.status !== "Reserved") {
       return res.status(400).json({
         success: false,
@@ -504,26 +542,37 @@ const completeOrganRequest = async (req, res) => {
 
     await request.save();
     await organ.save();
-    await Promise.all([
-      notificationService.sendHospitalNotification({
-        hospitalId: request.requestingHospital,
-        event: "RequestUpdated",
-        data: {
-          title: "Organ request completed",
-          message: "The organ request has been marked as completed.",
-          request: request._id,
-        }
-      }),
-      notificationService.sendHospitalNotification({
-        hospitalId: request.supplyingHospital,
-        event: "RequestUpdated",
-        data: {
-          title: "Organ request completed",
-          message: "The organ request has been marked as completed.",
-          request: request._id,
-        }
-      }),
-    ]);
+
+    // Notify both hospitals
+    try {
+      await Promise.all([
+        notificationService.sendHospitalNotification({
+          hospitalId: request.requestingHospital,
+          event: "RequestUpdated",
+          data: {
+            title: "Organ request completed",
+            message: "The organ request has been marked as completed.",
+            request: request._id,
+          },
+        }),
+
+        notificationService.sendHospitalNotification({
+          hospitalId: request.supplyingHospital,
+          event: "RequestUpdated",
+          data: {
+            title: "Organ request completed",
+            message: "The organ request has been marked as completed.",
+            request: request._id,
+          },
+        }),
+      ]);
+    } catch (notificationError) {
+      console.error(
+        "Request completion notification error:",
+        notificationError,
+      );
+    }
+
     return res.status(200).json({
       success: true,
       message: "Organ request completed successfully",
@@ -539,6 +588,10 @@ const completeOrganRequest = async (req, res) => {
     });
   }
 };
+
+// ============================================================
+// EXPORTS
+// ============================================================
 
 module.exports = {
   createOrganRequest,
