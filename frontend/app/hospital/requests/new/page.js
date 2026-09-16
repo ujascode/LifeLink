@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -43,8 +43,6 @@ export default function NewOrganRequestPage() {
 
   // Search results
   const [filteredOrgans, setFilteredOrgans] = useState([]); // organs after organ/blood/city filters
-  const [hospitals, setHospitals] = useState([]); // hospitals with distance (if user location available)
-  const [nearestHospital, setNearestHospital] = useState(null); // nearest hospital object
   const [selectedHospital, setSelectedHospital] = useState(null); // highlighted hospital from card click
   const [selectedOrgan, setSelectedOrgan] = useState(null); // selected organ for request form
   const [submitting, setSubmitting] = useState(false); // submitting request
@@ -53,6 +51,7 @@ export default function NewOrganRequestPage() {
   const leafletMapRef = useRef(null);
   const markersRef = useRef(null);
   const userMarkerRef = useRef(null);
+  const [mapState, setMapState] = useState("loading");
 
   /* ======================
      AUTHENTICATION
@@ -155,64 +154,34 @@ export default function NewOrganRequestPage() {
     setFilteredOrgans(filtered);
   }, [organs, organType, bloodGroup, city]);
 
-  /* ======================
-     CALCULATE HOSPITALS & NEAREST
-  ====================== */
-  // Recalculate hospitals when filteredOrgans or userLocation changes
-  useEffect(() => {
-    if (
-      !userLocation.latitude ||
-      !userLocation.longitude ||
-      filteredOrgans.length === 0
-    ) {
-      // Clear derived hospital results when the search cannot be evaluated.
-      // eslint-disable-next-line react-hooks/set-state-in-effect
-      setHospitals([]);
-      setNearestHospital(null);
-      return;
-    }
+  const hasUserLocation = Number.isFinite(userLocation.latitude) && Number.isFinite(userLocation.longitude);
+  const isCoordinate = (latitude, longitude) => Number.isFinite(Number(latitude)) && Number.isFinite(Number(longitude)) && Math.abs(Number(latitude)) <= 90 && Math.abs(Number(longitude)) <= 180;
 
-    // Calculate distance for each unique hospital
-    const hospitalMap = new Map(); // key: hospital id, value: {hospital, distance, organ}
-    filteredOrgans.forEach((organ) => {
-      if (
-        organ.hospital &&
-        organ.hospital.latitude !== undefined &&
-        organ.hospital.longitude !== undefined
-      ) {
-        const hospitalId = organ.hospital._id || organ.hospital.id;
-        const distance = calculateDistance(
-          userLocation.latitude,
-          userLocation.longitude,
-          organ.hospital.latitude,
-          organ.hospital.longitude
-        );
+  const searchResults = useMemo(() => filteredOrgans.map((organ) => {
+    const hospital = typeof organ.hospital === "object" && organ.hospital ? organ.hospital : {};
+    const organLocation = organ.location || {};
+    const latitude = isCoordinate(organLocation.latitude, organLocation.longitude)
+      ? Number(organLocation.latitude) : isCoordinate(hospital.latitude, hospital.longitude) ? Number(hospital.latitude) : null;
+    const longitude = isCoordinate(organLocation.latitude, organLocation.longitude)
+      ? Number(organLocation.longitude) : isCoordinate(hospital.latitude, hospital.longitude) ? Number(hospital.longitude) : null;
+    const distance = hasUserLocation && latitude !== null
+      ? calculateDistance(userLocation.latitude, userLocation.longitude, latitude, longitude) : null;
+    return {
+      organ,
+      hospital,
+      latitude,
+      longitude,
+      distance,
+      city: organLocation.city || hospital.city || "Location unavailable",
+      address: organLocation.address || hospital.address || "Address unavailable",
+    };
+  }).sort((a, b) => (a.distance ?? Infinity) - (b.distance ?? Infinity)), [filteredOrgans, hasUserLocation, userLocation.latitude, userLocation.longitude]);
 
-        // If we already have this hospital, keep the one with shortest distance?
-        // Actually we want to show each organ separately? We'll keep the first encountered.
-        // For nearest hospital calculation, we need the closest hospital regardless of organ.
-        // We'll store the hospital info and distance.
-        if (!hospitalMap.has(hospitalId) || distance < hospitalMap.get(hospitalId).distance) {
-          hospitalMap.set(hospitalId, {
-            hospital: organ.hospital,
-            distance: distance,
-            organ: organ, // the organ that gave us this hospital (for display)
-          });
-        }
-      }
-    });
-
-    const hospitalsArray = Array.from(hospitalMap.values()).sort(
-      (a, b) => a.distance - b.distance
-    );
-
-    setHospitals(hospitalsArray);
-    if (hospitalsArray.length > 0) {
-      setNearestHospital(hospitalsArray[0]); // closest is first after sorting
-    } else {
-      setNearestHospital(null);
-    }
-  }, [filteredOrgans, userLocation.latitude, userLocation.longitude]);
+  const withinRadiusResults = useMemo(() => !hasUserLocation ? searchResults : searchResults.filter((result) => result.distance !== null && result.distance <= radius), [hasUserLocation, radius, searchResults]);
+  const outsideRadiusResults = useMemo(() => hasUserLocation ? searchResults.filter((result) => result.distance !== null && result.distance > radius) : [], [hasUserLocation, radius, searchResults]);
+  const displayResults = hasUserLocation ? withinRadiusResults : searchResults;
+  const visibleResults = displayResults.length > 0 ? displayResults : outsideRadiusResults;
+  const nearestHospital = displayResults[0] || null;
 
   /* ======================
      GEOLOCATION
@@ -236,8 +205,6 @@ export default function NewOrganRequestPage() {
       },
       (error) => {
         setError(`Error getting location: ${error.message}`);
-        // Fallback to a default location (e.g., New York City) for demo purposes
-        setUserLocation({ latitude: 40.7128, longitude: -74.0060 });
         setLocationLoading(false);
       }
     );
@@ -247,14 +214,7 @@ export default function NewOrganRequestPage() {
      SEARCH HANDLER
   ====================== */
   const handleSearch = () => {
-    // The filteredOrgans are already computed via useEffect on organType/bloodGroup/city.
-    // We just need to trigger a recalculation of hospitals (which will happen because
-    // filteredOrgans changed? Actually filteredOrgans doesn't change when we click search
-    // unless we change the inputs. So we'll just set a dummy state to trigger the hospitals effect.
-    // Instead, we can just rely on the fact that hospitals effect runs on filteredOrgans change.
-    // Since we are not changing the inputs, we need to trigger a recomputation.
-    // We'll do a empty state update to force re-run of the hospitals effect.
-    setFilteredOrgans(prev => [...prev]);
+    setError("");
   };
 
   /* ======================
@@ -276,10 +236,16 @@ export default function NewOrganRequestPage() {
 
       if (!leafletMapRef.current) return;
 
+      if (leafletMapRef.current._leafletMap) {
+        leafletMapRef.current._leafletMap.remove();
+        leafletMapRef.current._leafletMap = null;
+      }
+
       // Set up the map
       const map = L.map(leafletMapRef.current, {
         zoomControl: false,
       });
+      setMapState("ready");
 
       // Add OpenStreetMap tile layer
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
@@ -322,15 +288,15 @@ export default function NewOrganRequestPage() {
       }
 
       // Add hospital markers
-      hospitals.forEach((hospital) => {
+      visibleResults.filter((hospital) => hospital.latitude !== null && hospital.longitude !== null).forEach((hospital) => {
         const marker = L.marker(
-          [hospital.hospital.latitude, hospital.hospital.longitude]
+          [hospital.latitude, hospital.longitude]
         ).addTo(markersRef.current);
 
         marker.bindPopup(`
-          <b>${hospital.hospital.hospitalName}</b><br/>
-          ${hospital.hospital.address}, ${hospital.hospital.city}<br/>
-          Distance: ${hospital.distance.toFixed(1)} km<br/>
+          <b>${hospital.hospital.hospitalName || "Hospital"}</b><br/>
+          ${hospital.address}, ${hospital.city}<br/>
+          Distance: ${hospital.distance === null ? "Unavailable" : `${hospital.distance.toFixed(1)} km`}<br/>
           Organ: ${hospital.organ.organType}<br/>
           Blood Group: ${hospital.organ.bloodGroup}
         `);
@@ -347,7 +313,7 @@ export default function NewOrganRequestPage() {
           // Open popup
           marker.openPopup();
           // Fly to marker
-          map.flyTo([hospital.hospital.latitude, hospital.hospital.longitude], 15);
+          map.flyTo([hospital.latitude, hospital.longitude], 15);
         });
       });
 
@@ -359,10 +325,10 @@ export default function NewOrganRequestPage() {
       ) {
         bounds.extend([userLocation.latitude, userLocation.longitude]);
       }
-      hospitals.forEach((hospital) => {
+      visibleResults.filter((hospital) => hospital.latitude !== null && hospital.longitude !== null).forEach((hospital) => {
         bounds.extend([
-          hospital.hospital.latitude,
-          hospital.hospital.longitude,
+          hospital.latitude,
+          hospital.longitude,
         ]);
       });
 
@@ -377,28 +343,22 @@ export default function NewOrganRequestPage() {
       leafletMapRef.current._leafletMap = map;
     }).catch((err) => {
       console.error("Error loading Leaflet:", err);
-      setError("Failed to load map library");
+      setMapState("error");
     });
   }, [
     userLocation.latitude,
     userLocation.longitude,
-    hospitals,
+    visibleResults,
     // We don't include setSelectedHospital etc. to avoid too many re-renders
   ]);
 
   // Initialize map when hospitals data changes (or user location changes)
   useEffect(() => {
-    if (
-      (userLocation.latitude !== undefined &&
-        userLocation.longitude !== undefined) ||
-      hospitals.length > 0
-    ) {
-      initializeMap();
-    }
+    initializeMap();
   }, [
     userLocation.latitude,
     userLocation.longitude,
-    hospitals.length,
+    visibleResults.length,
     initializeMap,
   ]);
 
@@ -422,12 +382,12 @@ export default function NewOrganRequestPage() {
     if (
       leafletMapRef.current &&
       leafletMapRef.current._leafletMap &&
-      hospital.hospital.latitude !== undefined &&
-      hospital.hospital.longitude !== undefined
+      hospital.latitude !== null &&
+      hospital.longitude !== null
     ) {
       const map = leafletMapRef.current._leafletMap;
       map.flyTo(
-        [hospital.hospital.latitude, hospital.hospital.longitude],
+        [hospital.latitude, hospital.longitude],
         15
       );
       // Open popup for this hospital
@@ -435,8 +395,8 @@ export default function NewOrganRequestPage() {
         const markers = markersRef.current.getLayers();
         const hospitalMarker = markers.find(
           (m) =>
-            m.getLatLng().lat === hospital.hospital.latitude &&
-            m.getLatLng().lng === hospital.hospital.longitude
+            m.getLatLng().lat === hospital.latitude &&
+            m.getLatLng().lng === hospital.longitude
         );
         if (hospitalMarker) {
           hospitalMarker.openPopup();
@@ -788,13 +748,28 @@ export default function NewOrganRequestPage() {
             */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               {/* MAP */}
-              <div className="lg:col-span-1">
+              <div className="relative lg:col-span-1">
                 {/* Map Container */}
                 <div
                   ref={leafletMapRef}
                   className="h-[500px] w-full rounded-lg border border-gray-200 shadow-sm"
                   aria-label="Map of nearby hospitals"
                 />
+                {mapState === "loading" && (
+                  <div className="absolute inset-0 grid place-items-center rounded-lg border border-gray-200 bg-gray-50 text-sm text-gray-600">
+                    Loading hospital map…
+                  </div>
+                )}
+                {mapState === "error" && (
+                  <div className="absolute inset-0 grid place-items-center rounded-lg border border-amber-200 bg-amber-50 p-6 text-center text-sm text-amber-900">
+                    The map is unavailable. Matching hospital results remain available alongside it.
+                  </div>
+                )}
+                {mapState === "ready" && visibleResults.filter((result) => result.latitude !== null && result.longitude !== null).length === 0 && (
+                  <div className="pointer-events-none absolute inset-0 grid place-items-center rounded-lg bg-white/85 p-6 text-center text-sm text-gray-600">
+                    No matching hospitals have usable coordinates for map markers. Their result cards are still available.
+                  </div>
+                )}
               </div>
 
               {/* HOSPITAL RESULTS */}
@@ -815,10 +790,10 @@ export default function NewOrganRequestPage() {
                             Nearest Match
                           </h3>
                           <p className="text-sm text-gray-500">
-                            {nearestHospital.hospitalName} <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">✓ Verified</span>
+                            {nearestHospital.hospital.hospitalName || "Hospital"} <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded-full">✓ Verified</span>
                           </p>
                           <p className="text-sm text-gray-600">
-                            {nearestHospital.distance} km away • {nearestHospital.city}
+                            {nearestHospital.distance === null ? "Distance unavailable" : `${nearestHospital.distance.toFixed(1)} km away`} • {nearestHospital.city}
                           </p>
                           <p className="text-sm text-gray-600">
                             Organ: {nearestHospital.organ.organType} • Blood Group: {nearestHospital.organ.bloodGroup}
@@ -834,10 +809,10 @@ export default function NewOrganRequestPage() {
                               View Details
                             </button>
                             <button
-                              onClick={handleSubmitRequest}
+                              onClick={() => handleSelectOrgan(nearestHospital.organ)}
                               className="flex items-center gap-2 px-3 py-1.5 text-sm font-medium text-white bg-green-600 rounded-lg hover:bg-green-700"
                             >
-                              Send Request
+                              Select Organ
                             </button>
                           </div>
                       </div>
@@ -845,13 +820,13 @@ export default function NewOrganRequestPage() {
                   </div>
                 )}
                 {/* All Hospitals List */}
-                {hospitals.length > 0 && (
+                {visibleResults.length > 0 && (
                   <>
                     <h3 className="text-lg font-semibold text-gray-800 mb-3">
-                      Matching Hospitals ({hospitals.length} found)
+                      {displayResults.length === 0 ? "Matching Hospitals Outside Selected Radius" : "Matching Hospitals"} ({visibleResults.length} found)
                     </h3>
                     <div className="space-y-4">
-                      {hospitals.map((hospital) => (
+                      {visibleResults.map((hospital) => (
                         <div
                           key={hospital.hospital._id || hospital.hospital.id}
                           id={`hospital-card-${hospital.hospital._id || hospital.hospital.id}`}
@@ -871,17 +846,24 @@ export default function NewOrganRequestPage() {
                               </div>
                             <div className="ml-4">
                               <h4 className="font-semibold text-gray-900">
-                                {hospital.hospitalName}
+                                {hospital.hospital.hospitalName || "Hospital"}
                               </h4>
                               <p className="text-sm text-gray-500">
-                                {hospital.hospital.address}, {hospital.hospital.city}
+                                {hospital.address}, {hospital.city}
                               </p>
                               <p className="text-sm text-gray-600">
-                                Distance: {hospital.distance} km
+                                Distance: {hospital.distance === null ? "Unavailable" : `${hospital.distance.toFixed(1)} km`}
                               </p>
                               <p className="text-sm text-gray-600">
                                 Organ: {hospital.organ.organType} • Blood Group: {hospital.organ.bloodGroup}
                               </p>
+                              <button
+                                type="button"
+                                onClick={(event) => { event.stopPropagation(); handleSelectOrgan(hospital.organ); }}
+                                className="mt-3 rounded-lg border border-blue-300 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-50"
+                              >
+                                Select Organ
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -891,9 +873,9 @@ export default function NewOrganRequestPage() {
                 )}
 
                 {/* No Hospitals Found */}
-                {filteredOrgans.length > 0 && hospitals.length === 0 && (
+                {filteredOrgans.length > 0 && visibleResults.length === 0 && (
                   <div className="text-center py-8 text-gray-500">
-                    <p>No verified hospitals found within {radius} km of your location.</p>
+                    <p>No matching hospitals were found within {radius} km of your location.</p>
                     {userLocation.latitude !== undefined && userLocation.longitude !== undefined && (
                       <>
                         <p className="mt-2">
@@ -904,6 +886,11 @@ export default function NewOrganRequestPage() {
                         </p>
                       </>
                     )}
+                  </div>
+                )}
+                {outsideRadiusResults.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                    No matching hospitals are within {radius} km. Showing {outsideRadiusResults.length} matching hospital{outsideRadiusResults.length === 1 ? "" : "s"} outside the selected radius below.
                   </div>
                 )}
               </div>
