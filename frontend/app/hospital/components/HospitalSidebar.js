@@ -88,7 +88,7 @@ export default function HospitalSidebar() {
       {/* Sidebar */}
       <aside
         id="hospital-sidebar"
-        className={`fixed left-0 top-0 z-50 h-screen w-64 bg-slate-900 text-white transition-transform duration-200
+        className={`fixed left-0 top-0 z-50 flex h-[100dvh] w-64 flex-col bg-slate-900 text-white transition-transform duration-200
           md:translate-x-0
           ${open ? "translate-x-0" : "-translate-x-full"}`}
       >
@@ -102,12 +102,12 @@ export default function HospitalSidebar() {
         </div>
 
         {/* Navigation */}
-        <nav aria-label="Hospital navigation" className="px-3 py-6">
+        <nav aria-label="Hospital navigation" className="min-h-0 flex-1 overflow-y-auto px-3 py-6">
           <p className="mb-3 px-3 text-xs font-semibold uppercase tracking-wider text-slate-500">
             Main Menu
           </p>
 
-          <div className="space-y-1">
+          <div className="space-y-1 pb-3">
             {menuItems.map((item) => {
               const active = isActive(item.href);
 
@@ -131,7 +131,7 @@ export default function HospitalSidebar() {
         </nav>
 
         {/* Logout */}
-        <div className="absolute bottom-0 left-0 w-full border-t border-slate-700 p-4">
+        <div className="shrink-0 border-t border-slate-700 bg-slate-900 p-4">
           <button
             onClick={handleLogout}
             className="w-full rounded-lg bg-red-600 px-4 py-3 text-sm font-semibold text-white transition hover:bg-red-700"
