@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
+import LogoLoader from "@/components/LogoLoader";
 import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5000/api";
@@ -18,7 +19,7 @@ const ORGAN_TYPES = [
 
 const BLOOD_GROUPS = ["All", "A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"];
 
-const RADIUS_OPTIONS = [10, 25, 50, 100];
+const RADIUS_OPTIONS = [10, 25, 50, 100, 250, 500, 1000];
 
 export default function NewOrganRequestPage() {
   const router = useRouter();
@@ -40,6 +41,7 @@ export default function NewOrganRequestPage() {
   const [userLocation, setUserLocation] = useState({ latitude: undefined, longitude: undefined });
   const [radius, setRadius] = useState(50); // default radius in km
   const [locationLoading, setLocationLoading] = useState(false); // for geolocation loading
+  const [locationStatus, setLocationStatus] = useState("idle"); // idle | loading | success | error
 
   // Search results
   const [filteredOrgans, setFilteredOrgans] = useState([]); // organs after organ/blood/city filters
@@ -187,6 +189,8 @@ export default function NewOrganRequestPage() {
      GEOLOCATION
   ====================== */
   const handleUseMyLocation = () => {
+    setLocationStatus("loading");
+    setLocationLoading(true);
     setLocationLoading(true);
     if (!navigator.geolocation) {
       setError("Geolocation is not supported by your browser");
@@ -196,6 +200,8 @@ export default function NewOrganRequestPage() {
 
     navigator.geolocation.getCurrentPosition(
       (position) => {
+        setLocationStatus("success");
+        setLocationStatus("success");
         setUserLocation({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
@@ -555,7 +561,11 @@ export default function NewOrganRequestPage() {
       {/* =====================================================
           CONTENT
       ====================================================== */}
-      <section className="max-w-7xl mx-auto px-6 py-8">
+        {loading && (
+          <div className="min-h-screen flex items-center justify-center bg-slate-50">
+            <LogoLoader size={60} message="Loading LifeLink..." className="mb-4" />
+          </div>
+        )}
         {/* HEADER */}
         <div className="mb-8">
           <button
@@ -597,7 +607,7 @@ export default function NewOrganRequestPage() {
             Search Available Organs
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
             {/* Organ Type */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -646,7 +656,7 @@ export default function NewOrganRequestPage() {
                 <input
                   type="text"
                   value={city}
-                  onChange={(e) => setCity(e.target.value)}
+                  onChange={(e) => {setCity(e.target.value); setLocationStatus("idle");}}
                   placeholder="Example: Ahmedabad"
                   className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-900 placeholder:text-gray-400 outline-none focus:border-blue-500"
                 />
@@ -668,7 +678,7 @@ export default function NewOrganRequestPage() {
                       </svg>
                     )}
                     <span className="ml-2">
-                      {locationLoading ? "Locating..." : "Use My Location"}
+                      {locationStatus === "loading" ? "Locating..." : locationStatus === "success" ? "Location detected" : locationStatus === "error" ? "Unable to detect location. Enter a city or location manually." : "Use My Location"}
                     </span>
                   </button>
                 </div>
@@ -702,19 +712,9 @@ export default function NewOrganRequestPage() {
             {/* Search Button */}
             <div className="flex flex-col">
               <label className="hidden">Search</label>
-              <button
-                onClick={handleSearch}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-4 rounded-lg flex items-center justify-center gap-2"
-              >
+              <button>
                 {loading ? (
-                  <>
-                    <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" strokeOpacity="0.25" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
-                    </svg>
-                    <span className="ml-2">Searching...</span>
-                  </>
+                  <LogoLoader size={24} showMessageBelow={false} className="mx-auto" />
                 ) : (
                   <>
                     <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor">
@@ -1034,7 +1034,7 @@ export default function NewOrganRequestPage() {
                       Patient Information
                     </h4>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
                       {/* Name */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1159,8 +1159,8 @@ export default function NewOrganRequestPage() {
                   </div>
                 </form>
               </div>
-            )}
-          </>
+            )
+          }
         )}
       </section>
     </main>

@@ -1,9 +1,8 @@
-"use client"
+"use client";
 
-import { useEffect, useState} from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter} from "next/navigation";
-import LogoLoader from "@/components/LogoLoader";
+import { useRouter } from "next/navigation";
 import api from "@/services/api";
 
 export default function HospitalDashboard() {
@@ -25,32 +24,29 @@ export default function HospitalDashboard() {
       if (!token) {
         router.replace("/hospital/login");
         return;
-     }
+      }
 
       const response = await api.get("/hospitals/dashboard");
-      // Use hospital name from localStorage to avoid duplicate request
-      const userData = localStorage.getItem("lifelink_user");
-      const user = userData ? JSON.parse(userData) : null;
-      setUser({ name: user?.hospitalName ?? ""});
+      setUser({ name: response.data.hospital?.hospitalName });
       setStats(response.data.stats || {});
       setRecentRequests(response.data.recentRequests || []);
-   } catch (err) {
+    } catch (err) {
       console.error("Dashboard error:", err);
       if (err.response?.status === 401) {
         localStorage.removeItem("lifelink_token");
         localStorage.removeItem("lifelink_user");
         router.replace("/hospital/login");
         return;
-     }
+      }
       setError(
         err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
           ? "The dashboard request timed out. Please try again."
-          : err.response?.data?.message || "Unable to load dashboard."
+          : err.response?.data?.message || "Unable to load dashboard.",
       );
-   } finally {
+    } finally {
       setLoading(false);
-   }
- };
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
@@ -62,16 +58,13 @@ export default function HospitalDashboard() {
         if (!token) {
           router.replace("/hospital/login");
           return;
-       }
+        }
         const response = await api.get("/hospitals/dashboard");
         if (!isMounted) return;
-        // Use hospital name from localStorage to avoid duplicate request
-        const userData = localStorage.getItem("lifelink_user");
-        const user = userData ? JSON.parse(userData) : null;
-        setUser({ name: user?.hospitalName ?? ""});
+        setUser({ name: response.data.hospital?.hospitalName });
         setStats(response.data.stats || {});
         setRecentRequests(response.data.recentRequests || []);
-     } catch (err) {
+      } catch (err) {
         if (!isMounted) return;
         console.error("Dashboard error:", err);
         if (err.response?.status === 401) {
@@ -79,30 +72,36 @@ export default function HospitalDashboard() {
           localStorage.removeItem("lifelink_user");
           router.replace("/hospital/login");
           return;
-       }
+        }
         setError(
           err.code === "ECONNABORTED" || err.code === "ETIMEDOUT"
             ? "The dashboard request timed out. Please try again."
             : err.response?.data?.message || "Unable to load dashboard.",
         );
-     } finally {
+      } finally {
         if (!isMounted) return;
         setLoading(false);
-     }
-   }
+      }
+    }
 
     fetchData();
     return () => {
       isMounted = false;
-   };
-  }, [])
+    };
+  }, [router]);
+
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <LogoLoader size={60} message="Loading dashboard..." className="mb-4" />
+        <div className="text-center">
+          <h1 className="text-4xl font-bold text-blue-600">LifeLink</h1>
+
+          <p className="mt-3 text-slate-600">Loading dashboard...</p>
+        </div>
       </div>
     );
-   }
+  }
+
   if (error) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
@@ -120,7 +119,8 @@ export default function HospitalDashboard() {
         </div>
       </div>
     );
- }
+  }
+
   const dashboardStats = stats || {};
 
   return (

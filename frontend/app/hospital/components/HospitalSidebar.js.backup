@@ -29,13 +29,6 @@ export default function HospitalSidebar() {
     router.replace("/hospital/login");
   };
 
-  useEffect(() => {
-    if (open) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "";
-    }
-  }, [open]);
   const closeMobileMenu = () => {
     setOpen(false);
   };
@@ -57,7 +50,7 @@ export default function HospitalSidebar() {
   return (
     <>
       {/* Mobile Header */}
-      <header className="fixed top-0 left-0 right-0 z-60 flex h-16 items-center justify-between bg-slate-900 px-4 shadow-md md:hidden">
+      <header className="fixed top-0 left-0 right-0 z-50 flex h-16 items-center justify-between bg-slate-900 px-4 shadow-md md:hidden">
         <div className="flex items-center gap-3">
           <BrandLogo size={36} />
           <div>

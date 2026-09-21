@@ -27,6 +27,22 @@ export default function HospitalProfile() {
   useEffect(() => {
     const loadProfile = async () => {
       try {
+        // Prefill form with localStorage data if available
+        const userData = localStorage.getItem("lifelink_user");
+        if (userData) {
+          const user = JSON.parse(userData);
+          setHospital(user);
+          setForm({
+            hospitalName: user.hospitalName || "",
+            email: user.email || "",
+            phone: user.phone || "",
+            address: user.address || "",
+            city: user.city || "",
+            state: user.state || "",
+            pincode: user.pincode || "",
+          });
+        }
+
         setLoading(true);
         setError("");
 
@@ -36,15 +52,18 @@ export default function HospitalProfile() {
 
         setHospital(data);
 
-        setForm({
-          hospitalName: data.hospitalName || "",
-          email: data.email || "",
-          phone: data.phone || "",
-          address: data.address || "",
-          city: data.city || "",
-          state: data.state || "",
-          pincode: data.pincode || "",
-        });
+        // Only update form if not editing to avoid overwriting user changes
+        if (!editing) {
+          setForm({
+            hospitalName: data.hospitalName || "",
+            email: data.email || "",
+            phone: data.phone || "",
+            address: data.address || "",
+            city: data.city || "",
+            state: data.state || "",
+            pincode: data.pincode || "",
+          });
+        }
       } catch (err) {
         console.error("Profile error:", err);
 
