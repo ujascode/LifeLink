@@ -1162,7 +1162,6 @@ export default function NewOrganRequestPage() {
               </div>
             )
           }
-        }
     </main>
   );
 }
