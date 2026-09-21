@@ -895,7 +895,8 @@ export default function NewOrganRequestPage() {
                 )}
               </div>
             </div>
-
+          </>
+        )}
             {/* Organ Results Grid (alternative view when map not preferred) */}
             {/* We show the organ grid when we don't have user location (so no map) */}
             {!(
@@ -1161,8 +1162,7 @@ export default function NewOrganRequestPage() {
               </div>
             )
           }
-        )}
-      </section>
+        }
     </main>
   );
 }
