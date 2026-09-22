@@ -1096,5 +1096,8 @@ export default function NewOrganRequestPage() {
                       </div>
                     </div>
                   </div>
-                </div>
               </form>
+              </div>
+            )}
+    </main>
+  );
